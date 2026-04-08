@@ -1,0 +1,331 @@
+import React, { useState } from "react";
+import { symptomAPI } from "../services/api";
+
+const SymptomChecker = () => {
+  const [formData, setFormData] = useState({
+    patientName: "",
+    age: "",
+    gender: "",
+    symptoms: "",
+  });
+
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [history, setHistory] = useState([]);
+  const [showHistory, setShowHistory] = useState(false);
+
+  const handleChange = (e) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value,
+    });
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    setResult(null);
+
+    try {
+      const response = await symptomAPI.checkSymptoms({
+        patientName: formData.patientName || "Anonymous",
+        age: formData.age ? parseInt(formData.age) : null,
+        gender: formData.gender || null,
+        symptoms: formData.symptoms,
+      });
+
+      setResult(response);
+      setLoading(false);
+    } catch (err) {
+      setError(
+        err.response?.data?.message ||
+          "Failed to analyze symptoms. Please try again.",
+      );
+      setLoading(false);
+    }
+  };
+
+  const loadHistory = async () => {
+    try {
+      const response = await symptomAPI.getHistory();
+      setHistory(response.data);
+      setShowHistory(true);
+    } catch (err) {
+      setError("Failed to load history");
+    }
+  };
+
+  const getUrgencyBadgeClass = (level) => {
+    switch (level) {
+      case "Low":
+        return "badge-low";
+      case "Medium":
+        return "badge-medium";
+      case "High":
+        return "badge-high";
+      case "Emergency":
+        return "badge-emergency";
+      default:
+        return "badge-medium";
+    }
+  };
+
+  const resetForm = () => {
+    setFormData({
+      patientName: "",
+      age: "",
+      gender: "",
+      symptoms: "",
+    });
+    setResult(null);
+    setError(null);
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto p-6">
+      <div className="card mb-6">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-3xl font-bold text-primary mb-2">
+              🤖 AI Symptom Checker & Triage System
+            </h1>
+            <p className="text-gray-600">
+              Get instant AI-powered health assessment and specialist
+              recommendations
+            </p>
+          </div>
+          <button onClick={loadHistory} className="btn-secondary text-sm">
+            View History
+          </button>
+        </div>
+
+        {/* Symptom Check Form */}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Patient Name (Optional)
+              </label>
+              <input
+                type="text"
+                name="patientName"
+                value={formData.patientName}
+                onChange={handleChange}
+                placeholder="Enter name"
+                className="input-field"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Age (Optional)
+              </label>
+              <input
+                type="number"
+                name="age"
+                value={formData.age}
+                onChange={handleChange}
+                placeholder="Enter age"
+                min="1"
+                max="120"
+                className="input-field"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Gender (Optional)
+              </label>
+              <select
+                name="gender"
+                value={formData.gender}
+                onChange={handleChange}
+                className="input-field"
+              >
+                <option value="">Select gender</option>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Symptoms <span className="text-red-500">*</span>
+            </label>
+            <textarea
+              name="symptoms"
+              value={formData.symptoms}
+              onChange={handleChange}
+              placeholder="Describe your symptoms in detail (e.g., fever, headache, cough for 3 days)"
+              required
+              rows="4"
+              className="input-field resize-none"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Be as detailed as possible for accurate analysis
+            </p>
+          </div>
+
+          <div className="flex gap-3">
+            <button
+              type="submit"
+              disabled={loading || !formData.symptoms}
+              className="btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loading ? (
+                <>
+                  <span className="inline-block animate-spin mr-2">⏳</span>
+                  Analyzing Symptoms...
+                </>
+              ) : (
+                "🔍 Analyze Symptoms"
+              )}
+            </button>
+            {result && (
+              <button
+                type="button"
+                onClick={resetForm}
+                className="btn-secondary"
+              >
+                New Check
+              </button>
+            )}
+          </div>
+        </form>
+
+        {/* Error Display */}
+        {error && (
+          <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-red-800">{error}</p>
+          </div>
+        )}
+
+        {/* Results Display */}
+        {result && result.success && (
+          <div className="mt-6 space-y-4">
+            <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg p-6 border border-blue-200">
+              <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                📊 Analysis Results
+                <span
+                  className={`ml-auto ${getUrgencyBadgeClass(result.analysis.urgencyLevel)}`}
+                >
+                  {result.analysis.urgencyLevel} Priority
+                </span>
+              </h2>
+
+              {/* Possible Diseases */}
+              <div className="mb-4">
+                <h3 className="font-semibold text-gray-700 mb-2">
+                  🩺 Possible Conditions:
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {result.analysis.possibleDiseases.map((disease, index) => (
+                    <span
+                      key={index}
+                      className="bg-white px-3 py-1 rounded-full text-sm border border-gray-200"
+                    >
+                      {disease}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Recommended Specialist */}
+              <div className="mb-4">
+                <h3 className="font-semibold text-gray-700 mb-2">
+                  👨‍⚕️ Recommended Specialist:
+                </h3>
+                <p className="bg-white px-4 py-2 rounded-lg border border-gray-200 inline-block">
+                  {result.analysis.recommendedSpecialist}
+                </p>
+              </div>
+
+              {/* AI Advice */}
+              <div className="mb-4">
+                <h3 className="font-semibold text-gray-700 mb-2">
+                  💡 Medical Advice:
+                </h3>
+                <p className="bg-white px-4 py-3 rounded-lg border border-gray-200">
+                  {result.analysis.advice}
+                </p>
+              </div>
+
+              {/* Warning */}
+              {result.analysis.warning && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                  <p className="text-yellow-800">
+                    <strong>⚠️ Note:</strong> {result.analysis.warning}
+                  </p>
+                </div>
+              )}
+
+              {/* Disclaimer */}
+              <div className="mt-4 bg-white border border-gray-300 rounded-xl bg-white/80 backdrop-blur-sm shadow-sm p-4">
+                <p className="text-xs text-gray-600">{result.disclaimer}</p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* History Modal */}
+      {showHistory && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="p-6 border-b">
+              <div className="flex justify-between items-center">
+                <h2 className="text-2xl font-bold">Symptom Check History</h2>
+                <button
+                  onClick={() => setShowHistory(false)}
+                  className="text-gray-500 hover:text-gray-700 text-2xl"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+            <div className="p-6 overflow-y-auto">
+              {history.length === 0 ? (
+                <p className="text-center text-gray-500">
+                  No history available
+                </p>
+              ) : (
+                <div className="space-y-4">
+                  {history.map((check) => (
+                    <div key={check.check_id} className="border rounded-lg p-4">
+                      <div className="flex justify-between items-start mb-2">
+                        <div>
+                          <p className="font-semibold">{check.patient_name}</p>
+                          <p className="text-sm text-gray-600">
+                            {new Date(check.check_date).toLocaleString()}
+                          </p>
+                        </div>
+                        <span
+                          className={getUrgencyBadgeClass(check.urgency_level)}
+                        >
+                          {check.urgency_level}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-700 mb-2">
+                        <strong>Symptoms:</strong> {check.symptoms}
+                      </p>
+                      <p className="text-sm text-gray-700">
+                        <strong>Specialist:</strong>{" "}
+                        {check.recommended_specialist}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default SymptomChecker;

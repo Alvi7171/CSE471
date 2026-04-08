@@ -1,0 +1,314 @@
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                    MediAI SmartCare - Database Structure                      ║
+║                         SQLite Database (better-sqlite3)                       ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+
+┌───────────────────────────────────────────────────────────────────────────────┐
+│                              DATABASE FILE                                     │
+│  Location: /backend/mediai_smartcare.db                                       │
+│  Size: ~100 KB                                                                 │
+│  Type: SQLite 3                                                                │
+└───────────────────────────────────────────────────────────────────────────────┘
+
+
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                           TABLE 1: doctors                                     ║
+╠═══════════════════════════════════════════════════════════════════════════════╣
+║  Purpose: Store doctor information and credentials                            ║
+║  Records: 15 (5 English + 10 Bengali names)                                   ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+
+┌─────────────────────┬──────────────┬──────────────────┬──────────────────────┐
+│ Column              │ Type         │ Constraints      │ Description          │
+├─────────────────────┼──────────────┼──────────────────┼──────────────────────┤
+│ doctor_id           │ INTEGER      │ PRIMARY KEY      │ Unique ID            │
+│ name                │ TEXT         │ NOT NULL         │ Full name (Bengali)  │
+│ email               │ TEXT         │ UNIQUE, NOT NULL │ Email address        │
+│ phone               │ TEXT         │                  │ +880 format          │
+│ specialization      │ TEXT         │ NOT NULL         │ Medical specialty    │
+│ department          │ TEXT         │ NOT NULL         │ Hospital department  │
+│ qualification       │ TEXT         │                  │ MBBS, MD, FCPS       │
+│ experience_years    │ INTEGER      │ DEFAULT 0        │ Years of experience  │
+│ consultation_fee    │ REAL         │ DEFAULT 500.00   │ Fee in BDT (৳)       │
+│ is_available        │ INTEGER      │ DEFAULT 1        │ 1=active, 0=inactive │
+│ created_at          │ TEXT         │ TIMESTAMP        │ Creation time        │
+│ updated_at          │ TEXT         │ TIMESTAMP        │ Last update time     │
+└─────────────────────┴──────────────┴──────────────────┴──────────────────────┘
+
+Sample Data:
+┌────┬──────────────────────────────────────┬──────────────────┬──────────────┐
+│ ID │ Name                                 │ Specialization   │ Fee          │
+├────┼──────────────────────────────────────┼──────────────────┼──────────────┤
+│ 6  │ ডাঃ রহিম উদ্দিন চৌধুরী              │ Cardiologist     │ ৳1500        │
+│ 7  │ ডাঃ নাসরীন সুলতানা                 │ Gynecologist     │ ৳1200        │
+│ 8  │ ডাঃ কামরুল ইসলাম                    │ Orthopedic       │ ৳1300        │
+│ 9  │ ডাঃ শাহনাজ পারভীন                  │ Pediatrician     │ ৳900         │
+│ 10 │ ডাঃ তারেক আজিজ খান                 │ Neurologist      │ ৳1600        │
+│ 11 │ ডাঃ ফাতেমা বেগম                     │ Dermatologist    │ ৳1000        │
+│ 12 │ ডাঃ হাসান মাহমুদ                    │ General Physician│ ৳600         │
+│ 13 │ ডাঃ রুমানা আক্তার                   │ Psychiatrist     │ ৳1100        │
+│ 14 │ ডাঃ শফিক হোসেন                     │ ENT Specialist   │ ৳1000        │
+│ 15 │ ডাঃ সাবিনা ইয়াসমিন                 │ Ophthalmologist  │ ৳1200        │
+└────┴──────────────────────────────────────┴──────────────────┴──────────────┘
+
+
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                     TABLE 2: doctor_schedules                                  ║
+╠═══════════════════════════════════════════════════════════════════════════════╣
+║  Purpose: Define recurring weekly availability schedules                       ║
+║  Records: 55 schedule slots (18 English + 37 Bengali doctors)                 ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+
+┌─────────────────────┬──────────────┬──────────────────┬──────────────────────┐
+│ Column              │ Type         │ Constraints      │ Description          │
+├─────────────────────┼──────────────┼──────────────────┼──────────────────────┤
+│ schedule_id         │ INTEGER      │ PRIMARY KEY      │ Unique ID            │
+│ doctor_id           │ INTEGER      │ FOREIGN KEY      │ Links to doctors     │
+│ day_of_week         │ TEXT         │ CHECK IN (...)   │ Mon-Sun              │
+│ start_time          │ TEXT         │ NOT NULL         │ HH:MM:SS             │
+│ end_time            │ TEXT         │ NOT NULL         │ HH:MM:SS             │
+│ slot_duration       │ INTEGER      │ DEFAULT 30       │ Minutes (15-60)      │
+│ is_active           │ INTEGER      │ DEFAULT 1        │ 1=active, 0=deleted  │
+│ created_at          │ TEXT         │ TIMESTAMP        │ Creation time        │
+│ updated_at          │ TEXT         │ TIMESTAMP        │ Last update time     │
+└─────────────────────┴──────────────┴──────────────────┴──────────────────────┘
+
+Constraints:
+  • FOREIGN KEY (doctor_id) REFERENCES doctors(doctor_id) ON DELETE CASCADE
+  • UNIQUE (doctor_id, day_of_week, start_time)
+  • CHECK (day_of_week IN ('Monday', 'Tuesday', 'Wednesday', 'Thursday', 
+                           'Friday', 'Saturday', 'Sunday'))
+
+Sample Data (Dr. Rahim - ID 6):
+┌────────────┬────────────┬────────────┬──────────┬──────────┬──────────────┐
+│ Schedule ID│ Day        │ Start Time │ End Time │ Duration │ Active       │
+├────────────┼────────────┼────────────┼──────────┼──────────┼──────────────┤
+│ 19         │ Monday     │ 09:00:00   │ 13:00:00 │ 30 min   │ 1 (Yes)      │
+│ 20         │ Wednesday  │ 09:00:00   │ 13:00:00 │ 30 min   │ 1 (Yes)      │
+│ 21         │ Saturday   │ 14:00:00   │ 18:00:00 │ 30 min   │ 1 (Yes)      │
+└────────────┴────────────┴────────────┴──────────┴──────────┴──────────────┘
+
+Interpretation: Dr. Rahim is available:
+  • Every Monday 9 AM - 1 PM (generates 8 slots of 30 min each)
+  • Every Wednesday 9 AM - 1 PM (generates 8 slots)
+  • Every Saturday 2 PM - 6 PM (generates 8 slots)
+
+
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                       TABLE 3: time_slots                                      ║
+╠═══════════════════════════════════════════════════════════════════════════════╣
+║  Purpose: Track individual appointment slots for specific dates                ║
+║  Status: ⚠️  Table exists but NOT currently used                               ║
+║  Records: 0 (ready for future appointment booking feature)                    ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+
+┌─────────────────────┬──────────────┬──────────────────┬──────────────────────┐
+│ Column              │ Type         │ Constraints      │ Description          │
+├─────────────────────┼──────────────┼──────────────────┼──────────────────────┤
+│ slot_id             │ INTEGER      │ PRIMARY KEY      │ Unique ID            │
+│ doctor_id           │ INTEGER      │ FOREIGN KEY      │ Links to doctors     │
+│ schedule_date       │ TEXT         │ NOT NULL         │ YYYY-MM-DD           │
+│ start_time          │ TEXT         │ NOT NULL         │ HH:MM:SS             │
+│ end_time            │ TEXT         │ NOT NULL         │ HH:MM:SS             │
+│ is_booked           │ INTEGER      │ DEFAULT 0        │ 0=available, 1=booked│
+│ created_at          │ TEXT         │ TIMESTAMP        │ Creation time        │
+└─────────────────────┴──────────────┴──────────────────┴──────────────────────┘
+
+Future Usage Example:
+┌─────────┬───────────┬──────────────┬────────────┬──────────┬────────────┐
+│ Slot ID │ Doctor ID │ Date         │ Start Time │ End Time │ Is Booked  │
+├─────────┼───────────┼──────────────┼────────────┼──────────┼────────────┤
+│ 1       │ 6         │ 2026-04-14   │ 09:00:00   │ 09:30:00 │ 0 (Free)   │
+│ 2       │ 6         │ 2026-04-14   │ 09:30:00   │ 10:00:00 │ 1 (Booked) │
+│ 3       │ 6         │ 2026-04-14   │ 10:00:00   │ 10:30:00 │ 0 (Free)   │
+└─────────┴───────────┴──────────────┴────────────┴──────────┴────────────┘
+
+
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                      TABLE 4: symptom_checks                                   ║
+╠═══════════════════════════════════════════════════════════════════════════════╣
+║  Purpose: Store AI-based symptom analysis records                              ║
+║  Note: This is a separate feature (AI Symptom Checker)                         ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+
+(Separate feature - not part of doctor scheduling)
+
+
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                           TABLE RELATIONSHIPS                                  ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+
+┌─────────────────┐                ┌──────────────────────┐
+│    doctors      │                │  doctor_schedules    │
+│─────────────────│                │──────────────────────│
+│ * doctor_id (PK)│<───────────────│ * schedule_id (PK)   │
+│   name          │   1        *   │   doctor_id (FK)     │
+│   email         │                │   day_of_week        │
+│   specialization│                │   start_time         │
+│   department    │                │   end_time           │
+│   consultation_ │                │   slot_duration      │
+│   fee           │                │   is_active          │
+│   is_available  │                └──────────────────────┘
+└─────────────────┘                          │
+        │                                    │
+        │                                    │
+        │                          ┌─────────▼────────────┐
+        │                          │    time_slots        │
+        │                          │──────────────────────│
+        └──────────────────────────│ * slot_id (PK)       │
+                   1        *      │   doctor_id (FK)     │
+                                   │   schedule_date      │
+                                   │   start_time         │
+                                   │   end_time           │
+                                   │   is_booked          │
+                                   └──────────────────────┘
+
+Relationship Explanation:
+  • One doctor can have MANY schedules (1:M)
+  • One doctor can have MANY time slots (1:M)
+  • Cascade delete: Deleting a doctor deletes all their schedules and slots
+
+
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                       CONFLICT PREVENTION LOGIC                                ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+
+When creating a new schedule, the system checks for time overlaps:
+
+Existing Schedule:  [─────────────]  (Monday 09:00-13:00)
+                        09:00    13:00
+
+Attempt 1:         [────────]         ❌ CONFLICT (overlaps)
+                     10:00  12:00
+
+Attempt 2:                     [────────]  ✅ ALLOWED (no overlap)
+                                 14:00  18:00
+
+Attempt 3:    [──────]                  ✅ ALLOWED (no overlap)
+               07:00 08:00
+
+SQL Conflict Detection Query:
+╔════════════════════════════════════════════════════════════════════════════╗
+║ SELECT schedule_id FROM doctor_schedules                                   ║
+║ WHERE doctor_id = ?                                                        ║
+║ AND day_of_week = ?                                                        ║
+║ AND is_active = 1                                                          ║
+║ AND (                                                                      ║
+║   -- Condition 1: New starts before existing ends                         ║
+║   (start_time <= ? AND end_time > ?)                                      ║
+║   OR                                                                       ║
+║   -- Condition 2: New ends after existing starts                          ║
+║   (start_time < ? AND end_time >= ?)                                      ║
+║   OR                                                                       ║
+║   -- Condition 3: New completely within existing                          ║
+║   (start_time >= ? AND end_time <= ?)                                     ║
+║ )                                                                          ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+If conflict found → Return HTTP 409 "Schedule conflict detected"
+If no conflict → INSERT new schedule
+
+
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                      SCHEDULE DISTRIBUTION BY DAY                              ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+
+Saturday   ███████████████████████████ (5 schedules)
+Sunday     █████████████████████████████████████████ (7 schedules)
+Monday     ████████████████████████████████████████████████████ (10 schedules)
+Tuesday    ████████████████████████████████████████████████████ (10 schedules)
+Wednesday  ███████████████████████████████████████████████ (9 schedules)
+Thursday   ████████████████████████████████████████ (8 schedules)
+Friday     ██████████████████████████████ (6 schedules)
+
+
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                          DATABASE STATISTICS                                   ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+
+┌──────────────────────────────────┬──────────────────────────────────────────┐
+│ Metric                           │ Value                                    │
+├──────────────────────────────────┼──────────────────────────────────────────┤
+│ Total Tables                     │ 5 (doctors, doctor_schedules,            │
+│                                  │    time_slots, symptom_checks,           │
+│                                  │    sqlite_sequence)                      │
+│ Total Doctors                    │ 15 (5 English + 10 Bengali)              │
+│ Total Schedules                  │ 55 weekly schedules                      │
+│ Bengali Doctors                  │ 10                                       │
+│ Bengali Schedules                │ 37                                       │
+│ Average Schedules per Doctor     │ 3.7 schedules                            │
+│ Most Available Doctor            │ ডাঃ শাহনাজ পারভীন (6 days/week)        │
+│ Most Expensive Consultation      │ ডাঃ তারেক আজিজ খান (৳1600)             │
+│ Most Affordable Consultation     │ ডাঃ রাফিক রহমান (৳500)                  │
+│ Specializations                  │ 10 (Cardiology, Neurology, Pediatrics,  │
+│                                  │     Orthopedics, Gynecology, etc.)       │
+└──────────────────────────────────┴──────────────────────────────────────────┘
+
+
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                       DATABASE CONNECTION FLOW                                 ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+
+┌───────────────┐
+│ Express Server│  (Port 1355)
+└───────┬───────┘
+        │
+        │ 1. Import database module
+        ▼
+┌────────────────────────────────┐
+│ config/database.js             │
+│                                │
+│ const Database = require(      │
+│   'better-sqlite3'             │
+│ );                             │
+│ const db = new Database(       │
+│   'mediai_smartcare.db'        │
+│ );                             │
+│ db.pragma('foreign_keys = ON');│
+│ module.exports = db;           │
+└────────────┬───────────────────┘
+             │
+             │ 2. Database connection established
+             ▼
+┌─────────────────────────────────────┐
+│ mediai_smartcare.db (SQLite file)   │
+│                                     │
+│ • File-based database               │
+│ • No separate server process        │
+│ • ACID compliant                    │
+│ • Supports concurrent reads         │
+│ • Single writer at a time           │
+└─────────────────────────────────────┘
+
+
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                              HOW TO ACCESS                                     ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+
+Method 1: Via Backend API
+  • Start backend: cd backend && npm start
+  • API endpoint: http://localhost:1355/api/schedule/doctors
+  • Returns JSON data
+
+Method 2: Direct SQL Query (Node.js)
+  const db = require('./config/database');
+  const doctors = db.prepare('SELECT * FROM doctors').all();
+  console.log(doctors);
+
+Method 3: SQLite CLI
+  sqlite3 backend/mediai_smartcare.db
+  sqlite> SELECT * FROM doctors;
+  sqlite> .exit
+
+Method 4: DB Browser for SQLite
+  • Download: https://sqlitebrowser.org/
+  • Open file: backend/mediai_smartcare.db
+  • GUI for viewing/editing tables
+
+
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                          Created by: MD Shafiur Rahman Alvi                    ║
+║                          Student ID: 23201355                                  ║
+║                          Course: CSE471 - System Analysis Lab                  ║
+║                          Date: April 7, 2026                                   ║
+╚═══════════════════════════════════════════════════════════════════════════════╝

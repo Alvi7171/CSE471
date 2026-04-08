@@ -1,0 +1,5 @@
+$kind: http-request
+name: New Request
+url: http://localhost:1355/
+method: GET
+order: 1774469697689

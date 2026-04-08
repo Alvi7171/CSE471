@@ -1,0 +1,16 @@
+$kind: collection
+name: 'MediAI SmartCare API - Student ID 23201355'
+description: 'CSE471 Lab Assignment 3 - API Collection for Doctor Scheduling and AI Symptom Checker'
+variables:
+  - key: doctorId
+    value: '1'
+    type: default
+    enabled: true
+  - key: checkId
+    value: '1'
+    type: default
+    enabled: true
+  - key: scheduleId
+    value: '1'
+    type: default
+    enabled: true

@@ -1,0 +1,6 @@
+# Use this workspace to collaborate
+workspace:
+  id: a562e210-adc2-4f0c-8856-602812c71893
+localResources:
+  collections:
+    - ../mediai-smartcare/MediAI_SmartCare_Postman_Collection.json

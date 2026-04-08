@@ -1,0 +1,324 @@
+{
+  "info": {
+    "name": "MediAI SmartCare API - Student ID 23201355",
+    "description": "CSE471 Lab Assignment 3 - API Collection for Doctor Scheduling and AI Symptom Checker",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:1355/",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "1355",
+          "path": [""]
+        },
+        "description": "Check if server is running"
+      }
+    },
+    {
+      "name": "Doctor Scheduling APIs",
+      "item": [
+        {
+          "name": "1. Get All Doctors",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:1355/api/schedule/doctors",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "1355",
+              "path": ["api", "schedule", "doctors"]
+            },
+            "description": "Retrieve all available doctors with their details"
+          }
+        },
+        {
+          "name": "2. Get Doctor Schedule",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:1355/api/schedule/doctors/1",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "1355",
+              "path": ["api", "schedule", "doctors", "1"]
+            },
+            "description": "Get specific doctor's schedule by doctor ID"
+          }
+        },
+        {
+          "name": "3. Search Doctors by Specialization",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:1355/api/schedule/doctors/search?specialization=Cardiologist",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "1355",
+              "path": ["api", "schedule", "doctors", "search"],
+              "query": [
+                {
+                  "key": "specialization",
+                  "value": "Cardiologist"
+                }
+              ]
+            },
+            "description": "Search doctors by specialization or department"
+          }
+        },
+        {
+          "name": "4. Create Doctor Schedule",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"doctorId\": 1,\n  \"dayOfWeek\": \"Thursday\",\n  \"startTime\": \"14:00:00\",\n  \"endTime\": \"18:00:00\",\n  \"slotDuration\": 30\n}"
+            },
+            "url": {
+              "raw": "http://localhost:1355/api/schedule/create",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "1355",
+              "path": ["api", "schedule", "create"]
+            },
+            "description": "Create a new schedule for a doctor"
+          }
+        },
+        {
+          "name": "5. Update Doctor Schedule",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"startTime\": \"15:00:00\",\n  \"endTime\": \"19:00:00\",\n  \"slotDuration\": 45\n}"
+            },
+            "url": {
+              "raw": "http://localhost:1355/api/schedule/1",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "1355",
+              "path": ["api", "schedule", "1"]
+            },
+            "description": "Update an existing schedule by schedule ID"
+          }
+        },
+        {
+          "name": "6. Delete Doctor Schedule",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:1355/api/schedule/1",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "1355",
+              "path": ["api", "schedule", "1"]
+            },
+            "description": "Delete/deactivate a schedule by schedule ID"
+          }
+        }
+      ]
+    },
+    {
+      "name": "AI Symptom Checker APIs",
+      "item": [
+        {
+          "name": "1. Check Symptoms (Full Analysis)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"patientName\": \"John Doe\",\n  \"age\": 35,\n  \"gender\": \"Male\",\n  \"symptoms\": \"fever, headache, cough for 3 days, body ache, fatigue\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:1355/api/symptoms/check",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "1355",
+              "path": ["api", "symptoms", "check"]
+            },
+            "description": "Analyze symptoms using AI and save to database"
+          }
+        },
+        {
+          "name": "2. Quick Triage",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symptoms\": \"severe chest pain and shortness of breath\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:1355/api/symptoms/triage",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "1355",
+              "path": ["api", "symptoms", "triage"]
+            },
+            "description": "Quick triage assessment without database save"
+          }
+        },
+        {
+          "name": "3. Get Symptom History",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:1355/api/symptoms/history?limit=10",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "1355",
+              "path": ["api", "symptoms", "history"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "Get symptom check history records"
+          }
+        },
+        {
+          "name": "4. Get Symptom Check by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:1355/api/symptoms/1",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "1355",
+              "path": ["api", "symptoms", "1"]
+            },
+            "description": "Get specific symptom check details by check ID"
+          }
+        },
+        {
+          "name": "5. Get Symptom Statistics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:1355/api/symptoms/stats/overview",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "1355",
+              "path": ["api", "symptoms", "stats", "overview"]
+            },
+            "description": "Get symptom check statistics and analytics"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Test Cases for Submission",
+      "item": [
+        {
+          "name": "Emergency Symptom Test",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"patientName\": \"Emergency Test\",\n  \"age\": 45,\n  \"gender\": \"Male\",\n  \"symptoms\": \"severe chest pain radiating to left arm, sweating, difficulty breathing\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:1355/api/symptoms/check",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "1355",
+              "path": ["api", "symptoms", "check"]
+            },
+            "description": "Test emergency level symptoms"
+          }
+        },
+        {
+          "name": "Low Priority Symptom Test",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"patientName\": \"Low Priority Test\",\n  \"age\": 25,\n  \"gender\": \"Female\",\n  \"symptoms\": \"mild headache, slight tiredness\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:1355/api/symptoms/check",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "1355",
+              "path": ["api", "symptoms", "check"]
+            },
+            "description": "Test low priority symptoms"
+          }
+        },
+        {
+          "name": "Create Multiple Schedules",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"doctorId\": 2,\n  \"dayOfWeek\": \"Friday\",\n  \"startTime\": \"09:00:00\",\n  \"endTime\": \"13:00:00\",\n  \"slotDuration\": 20\n}"
+            },
+            "url": {
+              "raw": "http://localhost:1355/api/schedule/create",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "1355",
+              "path": ["api", "schedule", "create"]
+            },
+            "description": "Create schedule for different doctor"
+          }
+        }
+      ]
+    }
+  ]
+}
