@@ -27,7 +27,10 @@ function PatientBooking() {
   // Get today's date in YYYY-MM-DD format
   const getTodayDate = () => {
     const today = new Date();
-    return today.toISOString().split("T")[0];
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
   };
 
   // Set initial date to today
@@ -84,6 +87,9 @@ function PatientBooking() {
   };
 
   const handleSlotSelect = (slot) => {
+    if (slot.status === "booked") {
+      return;
+    }
     setSelectedSlot(slot);
   };
 
@@ -98,6 +104,11 @@ function PatientBooking() {
     // Validation
     if (!selectedDoctor || !selectedSlot) {
       setError("Please select a doctor and time slot");
+      return;
+    }
+
+    if (selectedSlot.status === "booked") {
+      setError("This time slot is already booked. Please select another slot.");
       return;
     }
 
@@ -154,7 +165,7 @@ function PatientBooking() {
       setTimeout(() => setSuccessMessage(""), 5000);
     } catch (err) {
       if (err.response && err.response.status === 409) {
-        setError("This time slot is now full. Please select another slot.");
+        setError("This time slot is already booked. Please select another slot.");
       } else {
         setError(err.response?.data?.message || "Failed to book appointment");
       }
@@ -334,16 +345,21 @@ function PatientBooking() {
                     {availableSlots.map((slot, index) => (
                       <button
                         key={index}
+                        type="button"
                         onClick={() => handleSlotSelect(slot)}
+                        disabled={slot.status === "booked"}
                         className={`p-3 border rounded-xl text-sm font-medium transition-all duration-300 ${
-                          selectedSlot?.time === slot.time
+                          slot.status === "booked"
+                            ? "border-gray-300 bg-gray-100 text-gray-500 cursor-not-allowed"
+                            : selectedSlot?.time === slot.time &&
+                                selectedSlot?.schedule_id === slot.schedule_id
                             ? "border-blue-500 bg-gradient-to-br from-blue-500 to-purple-600 text-white shadow-lg transform scale-105"
                             : "border-gray-300 bg-white/60 backdrop-blur-sm hover:border-blue-400 hover:bg-gradient-to-br hover:from-blue-50 hover:to-purple-50 hover:shadow-md"
                         }`}
                       >
                         {slot.display_time}
-                        <div className="text-xs mt-1 opacity-75">
-                          {slot.available_spots} left
+                        <div className="text-xs mt-1 opacity-80">
+                          {slot.status === "booked" ? "Booked" : "Available"}
                         </div>
                       </button>
                     ))}

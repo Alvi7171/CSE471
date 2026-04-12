@@ -5,6 +5,144 @@
 
 const { db } = require("../config/database");
 
+const DAY_NAMES = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+];
+const ISO_DATE_REGEX = /^(\d{4})-(\d{2})-(\d{2})$/;
+const TIME_REGEX = /^([01]\d|2[0-3]):([0-5]\d):([0-5]\d)$/;
+
+// Parse YYYY-MM-DD without local/UTC timezone shifts.
+const getDayOfWeekFromDateString = (dateString) => {
+  const match = ISO_DATE_REGEX.exec(dateString);
+  if (!match) {
+    return null;
+  }
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const utcDate = new Date(Date.UTC(year, month - 1, day));
+
+  // Reject impossible dates like 2026-02-30.
+  if (
+    utcDate.getUTCFullYear() !== year ||
+    utcDate.getUTCMonth() !== month - 1 ||
+    utcDate.getUTCDate() !== day
+  ) {
+    return null;
+  }
+
+  return DAY_NAMES[utcDate.getUTCDay()];
+};
+
+const timeToMinutes = (timeString) => {
+  const match = TIME_REGEX.exec(timeString);
+  if (!match) {
+    return null;
+  }
+
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  return hours * 60 + minutes;
+};
+
+const formatSlotDisplayTime = (timeString) => timeString.slice(0, 5);
+
+const ensureAppointmentSlotsTable = () => {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS appointment_slots (
+      slot_id INTEGER PRIMARY KEY AUTOINCREMENT,
+      schedule_id INTEGER NOT NULL,
+      doctor_id INTEGER NOT NULL,
+      slot_date TEXT NOT NULL,
+      slot_time TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'available' CHECK(status IN ('available', 'booked')),
+      appointment_id INTEGER,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE (schedule_id, slot_date, slot_time),
+      FOREIGN KEY (schedule_id) REFERENCES doctor_schedules(schedule_id) ON DELETE CASCADE,
+      FOREIGN KEY (doctor_id) REFERENCES doctors(doctor_id) ON DELETE CASCADE,
+      FOREIGN KEY (appointment_id) REFERENCES appointments(appointment_id) ON DELETE SET NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_appointment_slots_date_doctor
+      ON appointment_slots (slot_date, doctor_id, status);
+  `);
+};
+
+ensureAppointmentSlotsTable();
+
+const insertSlotIfMissingStmt = db.prepare(`
+  INSERT OR IGNORE INTO appointment_slots
+  (schedule_id, doctor_id, slot_date, slot_time, status)
+  VALUES (?, ?, ?, ?, 'available')
+`);
+
+const getSlotByCompositeKeyStmt = db.prepare(`
+  SELECT slot_id, status
+  FROM appointment_slots
+  WHERE schedule_id = ? AND slot_date = ? AND slot_time = ?
+`);
+
+const getActiveAppointmentForSlotStmt = db.prepare(`
+  SELECT appointment_id
+  FROM appointments
+  WHERE schedule_id = ?
+    AND appointment_date = ?
+    AND appointment_time = ?
+    AND status != 'cancelled'
+  LIMIT 1
+`);
+
+const markSlotAsBookedStmt = db.prepare(`
+  UPDATE appointment_slots
+  SET status = 'booked',
+      appointment_id = ?,
+      updated_at = CURRENT_TIMESTAMP
+  WHERE slot_id = ?
+`);
+
+const syncSlotAsBookedByCompositeKeyStmt = db.prepare(`
+  UPDATE appointment_slots
+  SET status = 'booked',
+      appointment_id = ?,
+      updated_at = CURRENT_TIMESTAMP
+  WHERE schedule_id = ?
+    AND slot_date = ?
+    AND slot_time = ?
+`);
+
+const markSlotAsAvailableStmt = db.prepare(`
+  UPDATE appointment_slots
+  SET status = 'available',
+      appointment_id = NULL,
+      updated_at = CURRENT_TIMESTAMP
+  WHERE schedule_id = ? AND slot_date = ? AND slot_time = ?
+`);
+
+const insertAppointmentStmt = db.prepare(`
+  INSERT INTO appointments (
+    schedule_id,
+    doctor_id,
+    patient_name,
+    patient_age,
+    patient_gender,
+    patient_phone,
+    patient_email,
+    symptoms,
+    appointment_date,
+    appointment_time,
+    status
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+`);
+
 /**
  * Get available doctors on a specific date
  * GET /api/appointments/available-doctors?date=YYYY-MM-DD
@@ -20,10 +158,13 @@ exports.getAvailableDoctors = (req, res) => {
       });
     }
 
-    // Get day of week from date
-    const dayOfWeek = new Date(date).toLocaleDateString("en-US", {
-      weekday: "long",
-    });
+    const dayOfWeek = getDayOfWeekFromDateString(date);
+    if (!dayOfWeek) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid date format. Use YYYY-MM-DD",
+      });
+    }
 
     // Get doctors with schedules on this date
     const query = `
@@ -82,9 +223,13 @@ exports.getAvailableSlots = (req, res) => {
       });
     }
 
-    const dayOfWeek = new Date(date).toLocaleDateString("en-US", {
-      weekday: "long",
-    });
+    const dayOfWeek = getDayOfWeekFromDateString(date);
+    if (!dayOfWeek) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid date format. Use YYYY-MM-DD",
+      });
+    }
 
     // Get schedules for this doctor on this date
     const schedules = db
@@ -94,12 +239,7 @@ exports.getAvailableSlots = (req, res) => {
         schedule_id,
         start_time,
         end_time,
-        slot_duration,
-        max_patients,
-        (SELECT COUNT(*) FROM appointments 
-         WHERE schedule_id = doctor_schedules.schedule_id 
-         AND appointment_date = ? 
-         AND status != 'cancelled') as booked_count
+        slot_duration
       FROM doctor_schedules
       WHERE doctor_id = ?
       AND is_active = 1
@@ -110,7 +250,7 @@ exports.getAvailableSlots = (req, res) => {
       ORDER BY start_time
     `,
       )
-      .all(date, doctorId, date, dayOfWeek);
+      .all(doctorId, date, dayOfWeek);
 
     if (schedules.length === 0) {
       return res.json({
@@ -120,41 +260,103 @@ exports.getAvailableSlots = (req, res) => {
       });
     }
 
+    const scheduleIds = schedules.map((schedule) => schedule.schedule_id);
+    const schedulePlaceholders = scheduleIds.map(() => "?").join(", ");
+    const existingSlots = db
+      .prepare(
+        `
+      SELECT schedule_id, slot_time, status
+      FROM appointment_slots
+      WHERE slot_date = ?
+      AND schedule_id IN (${schedulePlaceholders})
+    `,
+      )
+      .all(date, ...scheduleIds);
+
+    const slotStatusMap = new Map();
+    existingSlots.forEach((slot) => {
+      slotStatusMap.set(`${slot.schedule_id}|${slot.slot_time}`, slot.status);
+    });
+
+    // Sync with pre-existing active appointments so old records are reflected as booked slots.
+    const bookedAppointmentMap = new Map();
+    try {
+      const bookedAppointments = db
+        .prepare(
+          `
+        SELECT appointment_id, schedule_id, appointment_time
+        FROM appointments
+        WHERE appointment_date = ?
+          AND status != 'cancelled'
+          AND schedule_id IN (${schedulePlaceholders})
+      `,
+        )
+        .all(date, ...scheduleIds);
+
+      bookedAppointments.forEach((appointment) => {
+        bookedAppointmentMap.set(
+          `${appointment.schedule_id}|${appointment.appointment_time}`,
+          appointment.appointment_id,
+        );
+      });
+    } catch (error) {
+      if (!String(error.message).includes("no such table: appointments")) {
+        throw error;
+      }
+    }
+
     // Generate time slots from schedules
     const allSlots = [];
 
     schedules.forEach((schedule) => {
-      const available = schedule.max_patients - schedule.booked_count;
+      const startMinutes = timeToMinutes(schedule.start_time);
+      const endMinutes = timeToMinutes(schedule.end_time);
 
-      if (available > 0) {
-        const [startHour, startMin] = schedule.start_time
-          .split(":")
-          .map(Number);
-        const [endHour, endMin] = schedule.end_time.split(":").map(Number);
+      if (
+        startMinutes === null ||
+        endMinutes === null ||
+        !schedule.slot_duration ||
+        schedule.slot_duration <= 0
+      ) {
+        return;
+      }
 
-        const startMinutes = startHour * 60 + startMin;
-        const endMinutes = endHour * 60 + endMin;
+      for (
+        let time = startMinutes;
+        time < endMinutes;
+        time += schedule.slot_duration
+      ) {
+        const slotHour = Math.floor(time / 60);
+        const slotMin = time % 60;
+        const timeStr = `${String(slotHour).padStart(2, "0")}:${String(slotMin).padStart(2, "0")}:00`;
+        const slotKey = `${schedule.schedule_id}|${timeStr}`;
+        const status = slotStatusMap.get(slotKey) || "available";
 
-        // Generate slots
-        for (
-          let time = startMinutes;
-          time < endMinutes;
-          time += schedule.slot_duration
-        ) {
-          const slotHour = Math.floor(time / 60);
-          const slotMin = time % 60;
-          const timeStr = `${String(slotHour).padStart(2, "0")}:${String(slotMin).padStart(2, "0")}:00`;
+        // Persist generated slot rows so each slot has a stored status.
+        insertSlotIfMissingStmt.run(
+          schedule.schedule_id,
+          Number(doctorId),
+          date,
+          timeStr,
+        );
 
-          allSlots.push({
-            schedule_id: schedule.schedule_id,
-            time: timeStr,
-            display_time: `${String(slotHour).padStart(2, "0")}:${String(slotMin).padStart(2, "0")}`,
-            duration: schedule.slot_duration,
-            max_patients: schedule.max_patients,
-            booked_count: schedule.booked_count,
-            available_spots: available,
-          });
+        const bookedAppointmentId = bookedAppointmentMap.get(slotKey);
+        if (bookedAppointmentId) {
+          syncSlotAsBookedByCompositeKeyStmt.run(
+            bookedAppointmentId,
+            schedule.schedule_id,
+            date,
+            timeStr,
+          );
         }
+
+        allSlots.push({
+          schedule_id: schedule.schedule_id,
+          time: timeStr,
+          display_time: formatSlotDisplayTime(timeStr),
+          duration: schedule.slot_duration,
+          status: bookedAppointmentId ? "booked" : status,
+        });
       }
     });
 
@@ -209,58 +411,115 @@ exports.bookAppointment = (req, res) => {
       });
     }
 
-    // Check if schedule exists and is active
+    const dayOfWeek = getDayOfWeekFromDateString(appointmentDate);
+    if (!dayOfWeek) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid appointmentDate format. Use YYYY-MM-DD",
+      });
+    }
+
+    if (!TIME_REGEX.test(appointmentTime)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid appointmentTime format. Use HH:MM:SS",
+      });
+    }
+
+    // Check if schedule exists, belongs to doctor, and is active on this date.
     const schedule = db
       .prepare(
         `
-      SELECT 
+      SELECT
         schedule_id,
-        max_patients,
-        (SELECT COUNT(*) FROM appointments 
-         WHERE schedule_id = ? 
-         AND appointment_date = ? 
-         AND status != 'cancelled') as booked_count
+        doctor_id,
+        start_time,
+        end_time,
+        slot_duration
       FROM doctor_schedules
-      WHERE schedule_id = ? AND is_active = 1
+      WHERE schedule_id = ?
+        AND doctor_id = ?
+        AND is_active = 1
+        AND (
+          schedule_date = ?
+          OR (day_of_week = ? AND schedule_date IS NULL)
+        )
     `,
       )
-      .get(scheduleId, appointmentDate, scheduleId);
+      .get(scheduleId, doctorId, appointmentDate, dayOfWeek);
 
     if (!schedule) {
       return res.status(404).json({
         success: false,
-        message: "Schedule not found or inactive",
+        message: "Schedule not found for this doctor/date or inactive",
       });
     }
 
-    // Check if max capacity reached
-    if (schedule.booked_count >= schedule.max_patients) {
-      return res.status(409).json({
+    const appointmentMinutes = timeToMinutes(appointmentTime);
+    const scheduleStartMinutes = timeToMinutes(schedule.start_time);
+    const scheduleEndMinutes = timeToMinutes(schedule.end_time);
+    if (
+      appointmentMinutes === null ||
+      scheduleStartMinutes === null ||
+      scheduleEndMinutes === null
+    ) {
+      return res.status(400).json({
         success: false,
-        message: `Maximum patient capacity (${schedule.max_patients}) reached for this time slot`,
+        message: "Invalid schedule time configuration",
       });
     }
 
-    // Insert appointment
-    const result = db
-      .prepare(
-        `
-      INSERT INTO appointments (
-        schedule_id,
-        doctor_id,
-        patient_name,
-        patient_age,
-        patient_gender,
-        patient_phone,
-        patient_email,
-        symptoms,
-        appointment_date,
-        appointment_time,
-        status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
-    `,
-      )
-      .run(
+    if (
+      appointmentMinutes < scheduleStartMinutes ||
+      appointmentMinutes >= scheduleEndMinutes
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Appointment time is outside doctor schedule range",
+      });
+    }
+
+    if ((appointmentMinutes - scheduleStartMinutes) % schedule.slot_duration !== 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Appointment time is not aligned with slot duration",
+      });
+    }
+
+    const bookSlotTransaction = db.transaction(() => {
+      insertSlotIfMissingStmt.run(
+        scheduleId,
+        doctorId,
+        appointmentDate,
+        appointmentTime,
+      );
+
+      const slot = getSlotByCompositeKeyStmt.get(
+        scheduleId,
+        appointmentDate,
+        appointmentTime,
+      );
+
+      if (!slot || slot.status === "booked") {
+        const error = new Error("This time slot is already booked");
+        error.code = "SLOT_ALREADY_BOOKED";
+        throw error;
+      }
+
+      // Backward compatibility: if old appointment data already occupies slot.
+      const existingAppointment = getActiveAppointmentForSlotStmt.get(
+        scheduleId,
+        appointmentDate,
+        appointmentTime,
+      );
+      if (existingAppointment) {
+        markSlotAsBookedStmt.run(existingAppointment.appointment_id, slot.slot_id);
+        const error = new Error("This time slot is already booked");
+        error.code = "SLOT_ALREADY_BOOKED";
+        throw error;
+      }
+
+      const result = insertAppointmentStmt.run(
         scheduleId,
         doctorId,
         patientName,
@@ -272,6 +531,23 @@ exports.bookAppointment = (req, res) => {
         appointmentDate,
         appointmentTime,
       );
+
+      markSlotAsBookedStmt.run(result.lastInsertRowid, slot.slot_id);
+      return result.lastInsertRowid;
+    });
+
+    let appointmentId;
+    try {
+      appointmentId = bookSlotTransaction();
+    } catch (transactionError) {
+      if (transactionError.code === "SLOT_ALREADY_BOOKED") {
+        return res.status(409).json({
+          success: false,
+          message: "This time slot is already booked",
+        });
+      }
+      throw transactionError;
+    }
 
     // Get the created appointment
     const appointment = db
@@ -287,7 +563,7 @@ exports.bookAppointment = (req, res) => {
       WHERE a.appointment_id = ?
     `,
       )
-      .get(result.lastInsertRowid);
+      .get(appointmentId);
 
     res.status(201).json({
       success: true,
@@ -360,15 +636,51 @@ exports.cancelAppointment = (req, res) => {
   try {
     const { appointmentId } = req.params;
 
-    const result = db
+    const appointment = db
       .prepare(
         `
-      UPDATE appointments
-      SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP
+      SELECT appointment_id, status, schedule_id, appointment_date, appointment_time
+      FROM appointments
       WHERE appointment_id = ?
     `,
       )
-      .run(appointmentId);
+      .get(appointmentId);
+
+    if (!appointment) {
+      return res.status(404).json({
+        success: false,
+        message: "Appointment not found",
+      });
+    }
+
+    if (appointment.status === "cancelled") {
+      return res.json({
+        success: true,
+        message: "Appointment is already cancelled",
+      });
+    }
+
+    const cancelAppointmentTx = db.transaction(() => {
+      const result = db
+        .prepare(
+          `
+        UPDATE appointments
+        SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP
+        WHERE appointment_id = ?
+      `,
+        )
+        .run(appointmentId);
+
+      markSlotAsAvailableStmt.run(
+        appointment.schedule_id,
+        appointment.appointment_date,
+        appointment.appointment_time,
+      );
+
+      return result;
+    });
+
+    const result = cancelAppointmentTx();
 
     if (result.changes === 0) {
       return res.status(404).json({

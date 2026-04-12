@@ -63,6 +63,31 @@ try {
   `);
   console.log("✅ Created appointments table");
 
+  // Create appointment_slots table
+  console.log("\n🕐 Creating appointment_slots table...");
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS appointment_slots (
+      slot_id INTEGER PRIMARY KEY AUTOINCREMENT,
+      schedule_id INTEGER NOT NULL,
+      doctor_id INTEGER NOT NULL,
+      slot_date TEXT NOT NULL,
+      slot_time TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'available' CHECK(status IN ('available', 'booked')),
+      appointment_id INTEGER,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE (schedule_id, slot_date, slot_time),
+      FOREIGN KEY (schedule_id) REFERENCES doctor_schedules(schedule_id) ON DELETE CASCADE,
+      FOREIGN KEY (doctor_id) REFERENCES doctors(doctor_id) ON DELETE CASCADE,
+      FOREIGN KEY (appointment_id) REFERENCES appointments(appointment_id) ON DELETE SET NULL
+    )
+  `);
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_appointment_slots_date_doctor
+    ON appointment_slots (slot_date, doctor_id, status)
+  `);
+  console.log("✅ Created appointment_slots table");
+
   // Update existing schedules to have max_patients
   console.log("\n📊 Updating existing schedules with max_patients...");
   const updateResult = db
