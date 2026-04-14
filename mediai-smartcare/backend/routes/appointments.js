@@ -48,4 +48,12 @@ router.get("/doctor/:doctorId", appointmentController.getDoctorAppointments);
  */
 router.put("/:appointmentId/cancel", appointmentController.cancelAppointment);
 
+/**
+ * @route   PUT /api/appointments/:appointmentId/notes
+ * @desc    Add notes/prescription to an appointment
+ * @params  appointmentId
+ * @access  Public
+ */
+router.put("/:appointmentId/notes", appointmentController.updateAppointmentNotes);
+
 module.exports = router;

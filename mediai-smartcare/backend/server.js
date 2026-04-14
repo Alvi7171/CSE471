@@ -6,6 +6,7 @@ const { testConnection } = require("./config/database");
 const scheduleRoutes = require("./routes/doctorSchedule");
 const symptomRoutes = require("./routes/symptomChecker");
 const appointmentRoutes = require("./routes/appointments");
+const patientRoutes = require("./routes/patients");
 
 // Initialize Express app
 const app = express();
@@ -72,6 +73,7 @@ app.get("/api/status", (req, res) => {
 app.use("/api/schedule", scheduleRoutes);
 app.use("/api/symptoms", symptomRoutes);
 app.use("/api/appointments", appointmentRoutes);
+app.use("/api/patients", patientRoutes);
 
 // ============================================
 // Error Handling Middleware
@@ -141,6 +143,9 @@ const startServer = () => {
       console.log(
         `   - GET  http://localhost:${PORT}/api/symptoms/stats/overview`,
       );
+      console.log("\n👥 Patient Management APIs:");
+      console.log(`   - GET  http://localhost:${PORT}/api/patients`);
+      console.log(`   - GET  http://localhost:${PORT}/api/patients/:phone/timeline`);
       console.log("========================================\n");
       console.log("✅ Server is ready to accept requests!\n");
     });

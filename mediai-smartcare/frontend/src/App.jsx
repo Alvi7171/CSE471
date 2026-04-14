@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import SymptomChecker from "./components/SymptomChecker";
 import DoctorSchedule from "./components/DoctorSchedule";
 import PatientBooking from "./components/PatientBooking";
+import PatientTimeline from "./components/PatientTimeline";
 import "./index.css";
 
 function App() {
@@ -63,6 +64,16 @@ function App() {
             >
               📅 Book Appointment
             </button>
+            <button
+              onClick={() => setActiveTab("timeline")}
+              className={`px-6 py-3 font-medium transition-all duration-300 rounded-t-lg ${
+                activeTab === "timeline"
+                  ? "text-purple-600 bg-white/80 backdrop-blur-sm shadow-md border-b-2 border-purple-600"
+                  : "text-gray-600 hover:text-gray-800 hover:bg-white/40"
+              }`}
+            >
+              👥 Patient Records
+            </button>
           </div>
         </div>
       </nav>
@@ -72,6 +83,7 @@ function App() {
         {activeTab === "symptom" && <SymptomChecker />}
         {activeTab === "schedule" && <DoctorSchedule />}
         {activeTab === "booking" && <PatientBooking />}
+        {activeTab === "timeline" && <PatientTimeline />}
       </main>
 
       {/* Footer */}

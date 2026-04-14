@@ -703,4 +703,44 @@ exports.cancelAppointment = (req, res) => {
   }
 };
 
+/**
+ * Ornov Update notes for an appointment
+ * PUT /api/appointments/:appointmentId/notes
+ */
+exports.updateAppointmentNotes = (req, res) => {
+  try {
+    const { appointmentId } = req.params;
+    const { notes } = req.body;
+
+    const result = db
+      .prepare(
+        `
+      UPDATE appointments
+      SET notes = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE appointment_id = ?
+    `
+      )
+      .run(notes, appointmentId);
+
+    if (result.changes === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Appointment not found",
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "Notes updated successfully",
+    });
+  } catch (error) {
+    console.error("Error updating appointment notes:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to update notes",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = exports;
