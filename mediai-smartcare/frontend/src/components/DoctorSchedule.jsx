@@ -25,6 +25,14 @@ const DoctorSchedule = () => {
     fetchDoctors();
   }, []);
 
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      handleSearch();
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
+  }, [searchTerm]);
+
   const fetchDoctors = async () => {
     setLoading(true);
     try {
@@ -118,7 +126,7 @@ const DoctorSchedule = () => {
     setLoading(true);
     try {
       const response = await scheduleAPI.searchDoctors({
-        specialization: searchTerm,
+        q: searchTerm,
       });
       setDoctors(response.data);
       setLoading(false);
@@ -160,10 +168,10 @@ const DoctorSchedule = () => {
               <div className="flex gap-2">
                 <input
                   type="text"
-                  placeholder="Search by specialization..."
+                  placeholder="Search by name, specialization, or department..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  onKeyPress={(e) => e.key === "Enter" && handleSearch()}
+                  onKeyDown={(e) => e.key === "Enter" && handleSearch()}
                   className="input-field text-sm"
                 />
                 <button onClick={handleSearch} className="btn-primary text-sm">

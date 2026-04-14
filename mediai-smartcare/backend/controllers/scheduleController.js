@@ -293,10 +293,16 @@ const deleteDoctorSchedule = (req, res) => {
 // ============================================
 const searchDoctors = (req, res) => {
   try {
-    const { specialization, department } = req.query;
+    const { specialization, department, q } = req.query;
 
     let query = "SELECT * FROM doctors WHERE is_available = 1";
     const params = [];
+
+    if (q) {
+      query += " AND (name LIKE ? OR specialization LIKE ? OR department LIKE ?)";
+      const searchValue = `%${q}%`;
+      params.push(searchValue, searchValue, searchValue);
+    }
 
     if (specialization) {
       query += " AND specialization LIKE ?";
