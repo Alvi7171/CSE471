@@ -6,6 +6,8 @@ const { testConnection } = require("./config/database");
 const scheduleRoutes = require("./routes/doctorSchedule");
 const symptomRoutes = require("./routes/symptomChecker");
 const appointmentRoutes = require("./routes/appointments");
+const authRoutes = require("./routes/auth");
+const adminRoutes = require("./routes/admin");
 
 // Initialize Express app
 const app = express();
@@ -72,6 +74,8 @@ app.get("/api/status", (req, res) => {
 app.use("/api/schedule", scheduleRoutes);
 app.use("/api/symptoms", symptomRoutes);
 app.use("/api/appointments", appointmentRoutes);
+app.use("/api/auth", authRoutes);
+app.use("/api/admin", adminRoutes);
 
 // ============================================
 // Error Handling Middleware
@@ -99,11 +103,15 @@ app.use((err, req, res, next) => {
 // ============================================
 // Server Initialization
 // ============================================
-const startServer = () => {
+const startServer = async () => {
   try {
+    if (!process.env.JWT_SECRET) {
+      throw new Error("JWT_SECRET is required in environment variables");
+    }
+
     // Test database connection
     console.log("🔄 Testing database connection...");
-    testConnection();
+    await testConnection();
 
     // Start server
     app.listen(PORT, () => {
@@ -113,7 +121,7 @@ const startServer = () => {
       console.log(`📍 Server running on: http://localhost:${PORT}`);
       console.log(`👨‍💻 Student: MD Shafiur Rahman Alvi`);
       console.log(`🆔 ID: 23201355`);
-      console.log(`💾 Database: SQLite (Local File)`);
+      console.log(`💾 Database: MySQL (Railway compatible)`);
       console.log("========================================");
       console.log("\n📋 Available Endpoints:");
       console.log(`   - GET  http://localhost:${PORT}/`);

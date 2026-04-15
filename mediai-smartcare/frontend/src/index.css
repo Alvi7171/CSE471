@@ -1,28 +1,106 @@
+@import url("https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --theme-primary: #0e747c;
+  --theme-primary-deep: #0a5f66;
+  --theme-accent: #f2cc52;
+  --theme-sidebar: linear-gradient(180deg, #0c6d74 0%, #085960 100%);
+  --theme-soft: #eaf4f4;
+  --theme-ink: #12343a;
+}
+
 @layer base {
   body {
-    @apply bg-gray-50 text-gray-900;
+    font-family: "Poppins", sans-serif;
+    @apply text-gray-900;
+  }
+
+  #root {
+    min-height: 100vh;
   }
 }
 
 @layer components {
+  .theme-bg {
+    background:
+      radial-gradient(circle at 10% 5%, rgba(14, 116, 124, 0.15), transparent 40%),
+      radial-gradient(circle at 80% 20%, rgba(242, 204, 82, 0.2), transparent 35%),
+      linear-gradient(145deg, #eef6f6, #dcebec);
+  }
+
+  .text-theme-primary {
+    color: var(--theme-primary);
+  }
+
+  .text-theme-ink {
+    color: var(--theme-ink);
+  }
+
+  .bg-theme-primary {
+    background-color: var(--theme-primary);
+  }
+
+  .bg-theme-primary-deep {
+    background-color: var(--theme-primary-deep);
+  }
+
+  .bg-theme-soft {
+    background-color: var(--theme-soft);
+  }
+
+  .bg-theme-sidebar {
+    background: var(--theme-sidebar);
+  }
+
+  .text-theme-accent {
+    color: var(--theme-accent);
+  }
+
+  .border-theme-primary {
+    border-color: var(--theme-primary);
+  }
+
+  .hover\:bg-theme-primary:hover {
+    background-color: var(--theme-primary);
+  }
+
+  .hover\:bg-theme-primary-deep:hover {
+    background-color: var(--theme-primary-deep);
+  }
+
+  .hover\:text-white:hover {
+    color: #ffffff;
+  }
+
   .btn-primary {
-    @apply bg-primary hover:bg-blue-600 text-white font-medium py-2 px-4 rounded-lg transition duration-200;
+    @apply text-white font-medium py-2 px-4 rounded-lg transition duration-200;
+    background-color: var(--theme-primary);
+  }
+
+  .btn-primary:hover {
+    background-color: var(--theme-primary-deep);
   }
 
   .btn-secondary {
-    @apply bg-secondary hover:bg-purple-600 text-white font-medium py-2 px-4 rounded-lg transition duration-200;
+    @apply text-white font-medium py-2 px-4 rounded-lg transition duration-200;
+    background-color: #6f7d8f;
+  }
+
+  .btn-secondary:hover {
+    background-color: #566476;
   }
 
   .card {
-    @apply bg-white rounded-lg shadow-md p-6;
+    @apply bg-white/85 backdrop-blur-sm rounded-2xl shadow-md p-6 border border-white/70;
   }
 
   .input-field {
-    @apply w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition;
+    @apply w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:border-transparent outline-none transition;
+    --tw-ring-color: rgba(14, 116, 124, 0.35);
   }
 
   .badge-low {

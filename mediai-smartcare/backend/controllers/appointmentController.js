@@ -1,9 +1,4 @@
-/**
- * Appointment Booking Controller
- * Handles patient appointment booking, availability checks, and appointment management
- */
-
-const { db } = require("../config/database");
+const { db, query } = require("../config/database");
 
 const DAY_NAMES = [
   "Sunday",
@@ -14,22 +9,19 @@ const DAY_NAMES = [
   "Friday",
   "Saturday",
 ];
-const ISO_DATE_REGEX = /^(\d{4})-(\d{2})-(\d{2})$/;
-const TIME_REGEX = /^([01]\d|2[0-3]):([0-5]\d):([0-5]\d)$/;
 
-// Parse YYYY-MM-DD without local/UTC timezone shifts.
+const ISO_DATE_REGEX = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/;
+const TIME_REGEX = /^([01][0-9]|2[0-3]):([0-5][0-9]):([0-5][0-9])$/;
+
 const getDayOfWeekFromDateString = (dateString) => {
   const match = ISO_DATE_REGEX.exec(dateString);
-  if (!match) {
-    return null;
-  }
+  if (!match) return null;
 
   const year = Number(match[1]);
   const month = Number(match[2]);
   const day = Number(match[3]);
   const utcDate = new Date(Date.UTC(year, month - 1, day));
 
-  // Reject impossible dates like 2026-02-30.
   if (
     utcDate.getUTCFullYear() !== year ||
     utcDate.getUTCMonth() !== month - 1 ||
@@ -43,118 +35,21 @@ const getDayOfWeekFromDateString = (dateString) => {
 
 const timeToMinutes = (timeString) => {
   const match = TIME_REGEX.exec(timeString);
-  if (!match) {
-    return null;
-  }
+  if (!match) return null;
 
-  const hours = Number(match[1]);
-  const minutes = Number(match[2]);
-  return hours * 60 + minutes;
+  return Number(match[1]) * 60 + Number(match[2]);
 };
 
 const formatSlotDisplayTime = (timeString) => timeString.slice(0, 5);
 
-const ensureAppointmentSlotsTable = () => {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS appointment_slots (
-      slot_id INTEGER PRIMARY KEY AUTOINCREMENT,
-      schedule_id INTEGER NOT NULL,
-      doctor_id INTEGER NOT NULL,
-      slot_date TEXT NOT NULL,
-      slot_time TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'available' CHECK(status IN ('available', 'booked')),
-      appointment_id INTEGER,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE (schedule_id, slot_date, slot_time),
-      FOREIGN KEY (schedule_id) REFERENCES doctor_schedules(schedule_id) ON DELETE CASCADE,
-      FOREIGN KEY (doctor_id) REFERENCES doctors(doctor_id) ON DELETE CASCADE,
-      FOREIGN KEY (appointment_id) REFERENCES appointments(appointment_id) ON DELETE SET NULL
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_appointment_slots_date_doctor
-      ON appointment_slots (slot_date, doctor_id, status);
-  `);
-};
-
-ensureAppointmentSlotsTable();
-
-const insertSlotIfMissingStmt = db.prepare(`
-  INSERT OR IGNORE INTO appointment_slots
-  (schedule_id, doctor_id, slot_date, slot_time, status)
-  VALUES (?, ?, ?, ?, 'available')
-`);
-
-const getSlotByCompositeKeyStmt = db.prepare(`
-  SELECT slot_id, status
-  FROM appointment_slots
-  WHERE schedule_id = ? AND slot_date = ? AND slot_time = ?
-`);
-
-const getActiveAppointmentForSlotStmt = db.prepare(`
-  SELECT appointment_id
-  FROM appointments
-  WHERE schedule_id = ?
-    AND appointment_date = ?
-    AND appointment_time = ?
-    AND status != 'cancelled'
-  LIMIT 1
-`);
-
-const markSlotAsBookedStmt = db.prepare(`
-  UPDATE appointment_slots
-  SET status = 'booked',
-      appointment_id = ?,
-      updated_at = CURRENT_TIMESTAMP
-  WHERE slot_id = ?
-`);
-
-const syncSlotAsBookedByCompositeKeyStmt = db.prepare(`
-  UPDATE appointment_slots
-  SET status = 'booked',
-      appointment_id = ?,
-      updated_at = CURRENT_TIMESTAMP
-  WHERE schedule_id = ?
-    AND slot_date = ?
-    AND slot_time = ?
-`);
-
-const markSlotAsAvailableStmt = db.prepare(`
-  UPDATE appointment_slots
-  SET status = 'available',
-      appointment_id = NULL,
-      updated_at = CURRENT_TIMESTAMP
-  WHERE schedule_id = ? AND slot_date = ? AND slot_time = ?
-`);
-
-const insertAppointmentStmt = db.prepare(`
-  INSERT INTO appointments (
-    schedule_id,
-    doctor_id,
-    patient_name,
-    patient_age,
-    patient_gender,
-    patient_phone,
-    patient_email,
-    symptoms,
-    appointment_date,
-    appointment_time,
-    status
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
-`);
-
-/**
- * Get available doctors on a specific date
- * GET /api/appointments/available-doctors?date=YYYY-MM-DD
- */
-exports.getAvailableDoctors = (req, res) => {
+exports.getAvailableDoctors = async (req, res) => {
   try {
     const { date } = req.query;
 
     if (!date) {
       return res.status(400).json({
         success: false,
-        message: "Date parameter is required (format: YYYY-MM-DD)",
+        message: "Date parameter is required (YYYY-MM-DD)",
       });
     }
 
@@ -166,8 +61,8 @@ exports.getAvailableDoctors = (req, res) => {
       });
     }
 
-    // Get doctors with schedules on this date
-    const query = `
+    const doctors = await query(
+      `
       SELECT DISTINCT
         d.doctor_id,
         d.name,
@@ -181,17 +76,14 @@ exports.getAvailableDoctors = (req, res) => {
       FROM doctors d
       INNER JOIN doctor_schedules s ON d.doctor_id = s.doctor_id
       WHERE d.is_available = 1
-      AND s.is_active = 1
-      AND (
-        s.schedule_date = ?
-        OR (s.day_of_week = ? AND s.schedule_date IS NULL)
-      )
-      ORDER BY d.name
-    `;
+        AND s.is_active = 1
+        AND (s.schedule_date = ? OR (s.day_of_week = ? AND s.schedule_date IS NULL))
+      ORDER BY d.name ASC
+      `,
+      [date, dayOfWeek],
+    );
 
-    const doctors = db.prepare(query).all(date, dayOfWeek);
-
-    res.json({
+    return res.json({
       success: true,
       date,
       dayOfWeek,
@@ -199,8 +91,7 @@ exports.getAvailableDoctors = (req, res) => {
       doctors,
     });
   } catch (error) {
-    console.error("Error fetching available doctors:", error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Failed to fetch available doctors",
       error: error.message,
@@ -208,18 +99,14 @@ exports.getAvailableDoctors = (req, res) => {
   }
 };
 
-/**
- * Get available time slots for a doctor on a specific date
- * GET /api/appointments/available-slots?doctorId=1&date=YYYY-MM-DD
- */
-exports.getAvailableSlots = (req, res) => {
+exports.getAvailableSlots = async (req, res) => {
   try {
     const { doctorId, date } = req.query;
 
     if (!doctorId || !date) {
       return res.status(400).json({
         success: false,
-        message: "doctorId and date parameters are required",
+        message: "doctorId and date are required",
       });
     }
 
@@ -231,144 +118,85 @@ exports.getAvailableSlots = (req, res) => {
       });
     }
 
-    // Get schedules for this doctor on this date
-    const schedules = db
-      .prepare(
-        `
-      SELECT 
-        schedule_id,
-        start_time,
-        end_time,
-        slot_duration
+    const schedules = await query(
+      `
+      SELECT schedule_id, start_time, end_time, slot_duration
       FROM doctor_schedules
       WHERE doctor_id = ?
-      AND is_active = 1
-      AND (
-        schedule_date = ?
-        OR (day_of_week = ? AND schedule_date IS NULL)
-      )
-      ORDER BY start_time
-    `,
-      )
-      .all(doctorId, date, dayOfWeek);
+        AND is_active = 1
+        AND (schedule_date = ? OR (day_of_week = ? AND schedule_date IS NULL))
+      ORDER BY start_time ASC
+      `,
+      [doctorId, date, dayOfWeek],
+    );
 
     if (schedules.length === 0) {
       return res.json({
         success: true,
-        message: "No schedules available for this doctor on this date",
         slots: [],
+        message: "No schedules available for this doctor on this date",
       });
     }
 
-    const scheduleIds = schedules.map((schedule) => schedule.schedule_id);
-    const schedulePlaceholders = scheduleIds.map(() => "?").join(", ");
-    const existingSlots = db
-      .prepare(
-        `
-      SELECT schedule_id, slot_time, status
-      FROM appointment_slots
-      WHERE slot_date = ?
-      AND schedule_id IN (${schedulePlaceholders})
-    `,
-      )
-      .all(date, ...scheduleIds);
+    const scheduleIds = schedules.map((s) => s.schedule_id);
+    const placeholders = scheduleIds.map(() => "?").join(",");
 
-    const slotStatusMap = new Map();
-    existingSlots.forEach((slot) => {
-      slotStatusMap.set(`${slot.schedule_id}|${slot.slot_time}`, slot.status);
-    });
-
-    // Sync with pre-existing active appointments so old records are reflected as booked slots.
-    const bookedAppointmentMap = new Map();
-    try {
-      const bookedAppointments = db
-        .prepare(
-          `
-        SELECT appointment_id, schedule_id, appointment_time
-        FROM appointments
-        WHERE appointment_date = ?
-          AND status != 'cancelled'
-          AND schedule_id IN (${schedulePlaceholders})
+    const bookedRows = await query(
+      `
+      SELECT schedule_id, appointment_time
+      FROM appointments
+      WHERE appointment_date = ?
+        AND status IN ('pending', 'confirmed', 'completed')
+        AND schedule_id IN (${placeholders})
       `,
-        )
-        .all(date, ...scheduleIds);
+      [date, ...scheduleIds],
+    );
 
-      bookedAppointments.forEach((appointment) => {
-        bookedAppointmentMap.set(
-          `${appointment.schedule_id}|${appointment.appointment_time}`,
-          appointment.appointment_id,
-        );
-      });
-    } catch (error) {
-      if (!String(error.message).includes("no such table: appointments")) {
-        throw error;
-      }
-    }
+    const bookedMap = new Set(
+      bookedRows.map((row) => `${row.schedule_id}|${row.appointment_time}`),
+    );
 
-    // Generate time slots from schedules
     const allSlots = [];
 
-    schedules.forEach((schedule) => {
+    for (const schedule of schedules) {
       const startMinutes = timeToMinutes(schedule.start_time);
       const endMinutes = timeToMinutes(schedule.end_time);
+      const slotDuration = Number(schedule.slot_duration || 30);
 
       if (
         startMinutes === null ||
         endMinutes === null ||
-        !schedule.slot_duration ||
-        schedule.slot_duration <= 0
+        slotDuration <= 0 ||
+        endMinutes <= startMinutes
       ) {
-        return;
+        continue;
       }
 
-      for (
-        let time = startMinutes;
-        time < endMinutes;
-        time += schedule.slot_duration
-      ) {
-        const slotHour = Math.floor(time / 60);
-        const slotMin = time % 60;
-        const timeStr = `${String(slotHour).padStart(2, "0")}:${String(slotMin).padStart(2, "0")}:00`;
-        const slotKey = `${schedule.schedule_id}|${timeStr}`;
-        const status = slotStatusMap.get(slotKey) || "available";
-
-        // Persist generated slot rows so each slot has a stored status.
-        insertSlotIfMissingStmt.run(
-          schedule.schedule_id,
-          Number(doctorId),
-          date,
-          timeStr,
-        );
-
-        const bookedAppointmentId = bookedAppointmentMap.get(slotKey);
-        if (bookedAppointmentId) {
-          syncSlotAsBookedByCompositeKeyStmt.run(
-            bookedAppointmentId,
-            schedule.schedule_id,
-            date,
-            timeStr,
-          );
-        }
+      for (let t = startMinutes; t < endMinutes; t += slotDuration) {
+        const hour = Math.floor(t / 60);
+        const minute = t % 60;
+        const slotTime = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00`;
+        const key = `${schedule.schedule_id}|${slotTime}`;
+        const booked = bookedMap.has(key);
 
         allSlots.push({
           schedule_id: schedule.schedule_id,
-          time: timeStr,
-          display_time: formatSlotDisplayTime(timeStr),
-          duration: schedule.slot_duration,
-          status: bookedAppointmentId ? "booked" : status,
+          time: slotTime,
+          display_time: formatSlotDisplayTime(slotTime),
+          duration: slotDuration,
+          status: booked ? "booked" : "available",
         });
       }
-    });
+    }
 
-    res.json({
+    return res.json({
       success: true,
       date,
-      doctorId: parseInt(doctorId),
+      doctorId: Number(doctorId),
       slots: allSlots,
     });
   } catch (error) {
-    console.error("Error fetching available slots:", error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Failed to fetch available slots",
       error: error.message,
@@ -376,32 +204,40 @@ exports.getAvailableSlots = (req, res) => {
   }
 };
 
-/**
- * Book an appointment
- * POST /api/appointments/book
- */
-exports.bookAppointment = (req, res) => {
-  try {
-    const {
-      scheduleId,
-      doctorId,
-      patientName,
-      patientAge,
-      patientGender,
-      patientPhone,
-      patientEmail,
-      symptoms,
-      appointmentDate,
-      appointmentTime,
-    } = req.body;
+exports.bookAppointment = async (req, res) => {
+  const connection = await db.getConnection();
 
-    // Validation
+  try {
+    const { scheduleId, doctorId, symptoms, appointmentDate, appointmentTime } =
+      req.body;
+
+    const patientRows = await query(
+      `
+      SELECT full_name, age, gender, phone, email
+      FROM users
+      WHERE user_id = ? AND role = 'patient'
+      LIMIT 1
+      `,
+      [req.user.userId],
+    );
+
+    if (patientRows.length === 0) {
+      return res.status(403).json({
+        success: false,
+        message: "Only patient accounts can book appointments",
+      });
+    }
+
+    const patient = patientRows[0];
+    const patientName = patient.full_name;
+    const patientAge = Number(patient.age || 0);
+    const patientGender = patient.gender || null;
+    const patientPhone = patient.phone || null;
+    const patientEmail = patient.email || null;
+
     if (
       !scheduleId ||
       !doctorId ||
-      !patientName ||
-      !patientAge ||
-      !patientPhone ||
       !appointmentDate ||
       !appointmentTime
     ) {
@@ -411,11 +247,19 @@ exports.bookAppointment = (req, res) => {
       });
     }
 
+    if (!patientName || !patientPhone || !patientAge) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Your patient profile is incomplete. Please update name, age, and mobile number.",
+      });
+    }
+
     const dayOfWeek = getDayOfWeekFromDateString(appointmentDate);
     if (!dayOfWeek) {
       return res.status(400).json({
         success: false,
-        message: "Invalid appointmentDate format. Use YYYY-MM-DD",
+        message: "Invalid appointmentDate format",
       });
     }
 
@@ -426,201 +270,191 @@ exports.bookAppointment = (req, res) => {
       });
     }
 
-    // Check if schedule exists, belongs to doctor, and is active on this date.
-    const schedule = db
-      .prepare(
-        `
-      SELECT
-        schedule_id,
-        doctor_id,
-        start_time,
-        end_time,
-        slot_duration
+    await connection.beginTransaction();
+
+    const [scheduleRows] = await connection.execute(
+      `
+      SELECT schedule_id, doctor_id, start_time, end_time, slot_duration
       FROM doctor_schedules
       WHERE schedule_id = ?
         AND doctor_id = ?
         AND is_active = 1
-        AND (
-          schedule_date = ?
-          OR (day_of_week = ? AND schedule_date IS NULL)
-        )
-    `,
-      )
-      .get(scheduleId, doctorId, appointmentDate, dayOfWeek);
+        AND (schedule_date = ? OR (day_of_week = ? AND schedule_date IS NULL))
+      FOR UPDATE
+      `,
+      [scheduleId, doctorId, appointmentDate, dayOfWeek],
+    );
 
-    if (!schedule) {
+    if (scheduleRows.length === 0) {
+      await connection.rollback();
       return res.status(404).json({
         success: false,
-        message: "Schedule not found for this doctor/date or inactive",
+        message: "Schedule not found for this doctor/date",
       });
     }
 
+    const schedule = scheduleRows[0];
     const appointmentMinutes = timeToMinutes(appointmentTime);
-    const scheduleStartMinutes = timeToMinutes(schedule.start_time);
-    const scheduleEndMinutes = timeToMinutes(schedule.end_time);
+    const scheduleStart = timeToMinutes(schedule.start_time);
+    const scheduleEnd = timeToMinutes(schedule.end_time);
+    const slotDuration = Number(schedule.slot_duration || 30);
+
     if (
       appointmentMinutes === null ||
-      scheduleStartMinutes === null ||
-      scheduleEndMinutes === null
+      scheduleStart === null ||
+      scheduleEnd === null ||
+      appointmentMinutes < scheduleStart ||
+      appointmentMinutes >= scheduleEnd ||
+      (appointmentMinutes - scheduleStart) % slotDuration !== 0
     ) {
+      await connection.rollback();
       return res.status(400).json({
         success: false,
-        message: "Invalid schedule time configuration",
+        message: "Appointment time is invalid for this schedule",
       });
     }
 
-    if (
-      appointmentMinutes < scheduleStartMinutes ||
-      appointmentMinutes >= scheduleEndMinutes
-    ) {
-      return res.status(400).json({
+    const [existingRows] = await connection.execute(
+      `
+      SELECT appointment_id
+      FROM appointments
+      WHERE schedule_id = ?
+        AND appointment_date = ?
+        AND appointment_time = ?
+        AND status IN ('pending', 'confirmed', 'completed')
+      LIMIT 1
+      FOR UPDATE
+      `,
+      [scheduleId, appointmentDate, appointmentTime],
+    );
+
+    if (existingRows.length > 0) {
+      await connection.rollback();
+      return res.status(409).json({
         success: false,
-        message: "Appointment time is outside doctor schedule range",
+        message: "This time slot is already booked",
       });
     }
 
-    if ((appointmentMinutes - scheduleStartMinutes) % schedule.slot_duration !== 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Appointment time is not aligned with slot duration",
-      });
-    }
-
-    const bookSlotTransaction = db.transaction(() => {
-      insertSlotIfMissingStmt.run(
-        scheduleId,
-        doctorId,
-        appointmentDate,
-        appointmentTime,
-      );
-
-      const slot = getSlotByCompositeKeyStmt.get(
-        scheduleId,
-        appointmentDate,
-        appointmentTime,
-      );
-
-      if (!slot || slot.status === "booked") {
-        const error = new Error("This time slot is already booked");
-        error.code = "SLOT_ALREADY_BOOKED";
-        throw error;
-      }
-
-      // Backward compatibility: if old appointment data already occupies slot.
-      const existingAppointment = getActiveAppointmentForSlotStmt.get(
-        scheduleId,
-        appointmentDate,
-        appointmentTime,
-      );
-      if (existingAppointment) {
-        markSlotAsBookedStmt.run(existingAppointment.appointment_id, slot.slot_id);
-        const error = new Error("This time slot is already booked");
-        error.code = "SLOT_ALREADY_BOOKED";
-        throw error;
-      }
-
-      const result = insertAppointmentStmt.run(
+    const [insertResult] = await connection.execute(
+      `
+      INSERT INTO appointments (
+        schedule_id,
+        doctor_id,
+        patient_name,
+        patient_age,
+        patient_gender,
+        patient_phone,
+        patient_email,
+        symptoms,
+        appointment_date,
+        appointment_time,
+        status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+      `,
+      [
         scheduleId,
         doctorId,
         patientName,
-        patientAge,
-        patientGender,
+        Number(patientAge),
+        patientGender || null,
         patientPhone,
-        patientEmail,
-        symptoms,
+        patientEmail || null,
+        symptoms || "No symptoms provided",
         appointmentDate,
         appointmentTime,
-      );
+      ],
+    );
 
-      markSlotAsBookedStmt.run(result.lastInsertRowid, slot.slot_id);
-      return result.lastInsertRowid;
-    });
+    await connection.commit();
 
-    let appointmentId;
-    try {
-      appointmentId = bookSlotTransaction();
-    } catch (transactionError) {
-      if (transactionError.code === "SLOT_ALREADY_BOOKED") {
-        return res.status(409).json({
-          success: false,
-          message: "This time slot is already booked",
-        });
-      }
-      throw transactionError;
-    }
-
-    // Get the created appointment
-    const appointment = db
-      .prepare(
-        `
-      SELECT 
+    const appointmentRows = await query(
+      `
+      SELECT
         a.*,
-        d.name as doctor_name,
+        d.name AS doctor_name,
         d.specialization,
         d.consultation_fee
       FROM appointments a
-      JOIN doctors d ON a.doctor_id = d.doctor_id
+      JOIN doctors d ON d.doctor_id = a.doctor_id
       WHERE a.appointment_id = ?
-    `,
-      )
-      .get(appointmentId);
+      LIMIT 1
+      `,
+      [insertResult.insertId],
+    );
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       message: "Appointment booked successfully",
-      appointment,
+      appointment: appointmentRows[0],
     });
   } catch (error) {
-    console.error("Error booking appointment:", error);
-    res.status(500).json({
+    await connection.rollback();
+    return res.status(500).json({
       success: false,
       message: "Failed to book appointment",
       error: error.message,
     });
+  } finally {
+    connection.release();
   }
 };
 
-/**
- * Get appointments for a doctor
- * GET /api/appointments/doctor/:doctorId
- */
-exports.getDoctorAppointments = (req, res) => {
+exports.getDoctorAppointments = async (req, res) => {
   try {
-    const { doctorId } = req.params;
+    let { doctorId } = req.params;
     const { date, status } = req.query;
 
-    let query = `
-      SELECT 
+    if (req.user?.role === "doctor") {
+      if (!req.user.doctorId) {
+        return res.status(403).json({
+          success: false,
+          message: "Doctor account is not linked to a doctor profile",
+        });
+      }
+
+      if (Number(doctorId) !== Number(req.user.doctorId)) {
+        return res.status(403).json({
+          success: false,
+          message: "You can access only your own appointments",
+        });
+      }
+
+      doctorId = req.user.doctorId;
+    }
+
+    let sql = `
+      SELECT
         a.*,
-        d.name as doctor_name
+        d.name AS doctor_name
       FROM appointments a
-      JOIN doctors d ON a.doctor_id = d.doctor_id
+      JOIN doctors d ON d.doctor_id = a.doctor_id
       WHERE a.doctor_id = ?
     `;
+
     const params = [doctorId];
 
     if (date) {
-      query += " AND a.appointment_date = ?";
+      sql += " AND a.appointment_date = ?";
       params.push(date);
     }
 
     if (status) {
-      query += " AND a.status = ?";
+      sql += " AND a.status = ?";
       params.push(status);
     }
 
-    query += " ORDER BY a.appointment_date DESC, a.appointment_time DESC";
+    sql += " ORDER BY a.appointment_date DESC, a.appointment_time DESC";
 
-    const appointments = db.prepare(query).all(...params);
+    const appointments = await query(sql, params);
 
-    res.json({
+    return res.json({
       success: true,
       count: appointments.length,
       appointments,
     });
   } catch (error) {
-    console.error("Error fetching doctor appointments:", error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Failed to fetch appointments",
       error: error.message,
@@ -628,74 +462,40 @@ exports.getDoctorAppointments = (req, res) => {
   }
 };
 
-/**
- * Cancel an appointment
- * PUT /api/appointments/:appointmentId/cancel
- */
-exports.cancelAppointment = (req, res) => {
+exports.cancelAppointment = async (req, res) => {
   try {
     const { appointmentId } = req.params;
 
-    const appointment = db
-      .prepare(
-        `
-      SELECT appointment_id, status, schedule_id, appointment_date, appointment_time
-      FROM appointments
-      WHERE appointment_id = ?
-    `,
-      )
-      .get(appointmentId);
+    const rows = await query(
+      "SELECT appointment_id, status FROM appointments WHERE appointment_id = ? LIMIT 1",
+      [appointmentId],
+    );
 
-    if (!appointment) {
+    if (rows.length === 0) {
       return res.status(404).json({
         success: false,
         message: "Appointment not found",
       });
     }
 
-    if (appointment.status === "cancelled") {
+    if (rows[0].status === "cancelled") {
       return res.json({
         success: true,
         message: "Appointment is already cancelled",
       });
     }
 
-    const cancelAppointmentTx = db.transaction(() => {
-      const result = db
-        .prepare(
-          `
-        UPDATE appointments
-        SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP
-        WHERE appointment_id = ?
-      `,
-        )
-        .run(appointmentId);
+    await query(
+      "UPDATE appointments SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE appointment_id = ?",
+      [appointmentId],
+    );
 
-      markSlotAsAvailableStmt.run(
-        appointment.schedule_id,
-        appointment.appointment_date,
-        appointment.appointment_time,
-      );
-
-      return result;
-    });
-
-    const result = cancelAppointmentTx();
-
-    if (result.changes === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "Appointment not found",
-      });
-    }
-
-    res.json({
+    return res.json({
       success: true,
       message: "Appointment cancelled successfully",
     });
   } catch (error) {
-    console.error("Error cancelling appointment:", error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Failed to cancel appointment",
       error: error.message,
@@ -703,4 +503,59 @@ exports.cancelAppointment = (req, res) => {
   }
 };
 
-module.exports = exports;
+exports.updateAppointmentStatus = async (req, res) => {
+  try {
+    const { appointmentId } = req.params;
+    const { status } = req.body;
+
+    if (!["confirmed", "declined"].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: "status must be confirmed or declined",
+      });
+    }
+
+    const rows = await query(
+      "SELECT appointment_id, doctor_id, status FROM appointments WHERE appointment_id = ? LIMIT 1",
+      [appointmentId],
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Appointment not found",
+      });
+    }
+
+    const appointment = rows[0];
+
+    if (
+      req.user?.role === "doctor" &&
+      Number(appointment.doctor_id) !== Number(req.user.doctorId)
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "You can update only your own appointments",
+      });
+    }
+
+    await query(
+      "UPDATE appointments SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE appointment_id = ?",
+      [status, appointmentId],
+    );
+
+    return res.json({
+      success: true,
+      message:
+        status === "confirmed"
+          ? "Appointment approved successfully"
+          : "Appointment declined successfully",
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Failed to update appointment status",
+      error: error.message,
+    });
+  }
+};

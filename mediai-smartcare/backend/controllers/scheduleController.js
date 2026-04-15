@@ -1,17 +1,45 @@
-const { db } = require("../config/database");
+const { query } = require("../config/database");
 
-/**
- * Doctor Schedule Controller
- * Handles all doctor scheduling and availability management
- * Author: MD Shafiur Rahman Alvi (ID: 23201355)
- */
-
-// ============================================
-// GET: Retrieve all doctors with their details
-// ============================================
-const getAllDoctors = (req, res) => {
+const getAllDoctors = async (req, res) => {
   try {
-    const doctors = db.prepare(`
+    if (req.user?.role === "doctor") {
+      if (!req.user.doctorId) {
+        return res.status(403).json({
+          success: false,
+          message: "Doctor account is not linked to a doctor profile",
+        });
+      }
+
+      const doctors = await query(
+        `
+        SELECT
+          doctor_id,
+          name,
+          email,
+          phone,
+          specialization,
+          department,
+          qualification,
+          experience_years,
+          consultation_fee,
+          is_available,
+          created_at
+        FROM doctors
+        WHERE is_available = 1 AND doctor_id = ?
+        LIMIT 1
+        `,
+        [req.user.doctorId],
+      );
+
+      return res.status(200).json({
+        success: true,
+        count: doctors.length,
+        data: doctors,
+      });
+    }
+
+    const doctors = await query(
+      `
       SELECT
         doctor_id,
         name,
@@ -27,16 +55,16 @@ const getAllDoctors = (req, res) => {
       FROM doctors
       WHERE is_available = 1
       ORDER BY name ASC
-    `).all();
+      `,
+    );
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       count: doctors.length,
       data: doctors,
     });
   } catch (error) {
-    console.error("Get Doctors Error:", error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Failed to retrieve doctors",
       error: error.message,
@@ -44,31 +72,50 @@ const getAllDoctors = (req, res) => {
   }
 };
 
-// ============================================
-// GET: Retrieve doctor schedule by doctor ID
-// ============================================
-const getDoctorSchedule = (req, res) => {
+const getDoctorSchedule = async (req, res) => {
   try {
-    const { doctorId } = req.params;
+    let { doctorId } = req.params;
 
-    // Get doctor details
-    const doctor = db.prepare("SELECT * FROM doctors WHERE doctor_id = ?").get(doctorId);
+    if (req.user?.role === "doctor") {
+      if (!req.user.doctorId) {
+        return res.status(403).json({
+          success: false,
+          message: "Doctor account is not linked to a doctor profile",
+        });
+      }
 
-    if (!doctor) {
+      if (Number(doctorId) !== Number(req.user.doctorId)) {
+        return res.status(403).json({
+          success: false,
+          message: "You can access only your own schedule",
+        });
+      }
+
+      doctorId = req.user.doctorId;
+    }
+
+    const doctorRows = await query(
+      "SELECT * FROM doctors WHERE doctor_id = ? LIMIT 1",
+      [doctorId],
+    );
+
+    if (doctorRows.length === 0) {
       return res.status(404).json({
         success: false,
         message: "Doctor not found",
       });
     }
 
-    // Get doctor's schedule
-    const schedules = db.prepare(`
+    const schedules = await query(
+      `
       SELECT
         schedule_id,
         day_of_week,
         start_time,
         end_time,
         slot_duration,
+        schedule_date,
+        max_patients,
         is_active
       FROM doctor_schedules
       WHERE doctor_id = ? AND is_active = 1
@@ -81,19 +128,22 @@ const getDoctorSchedule = (req, res) => {
           WHEN 'Friday' THEN 5
           WHEN 'Saturday' THEN 6
           WHEN 'Sunday' THEN 7
-        END
-    `).all(doctorId);
+          ELSE 8
+        END,
+        start_time
+      `,
+      [doctorId],
+    );
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       data: {
-        doctor,
+        doctor: doctorRows[0],
         schedules,
       },
     });
   } catch (error) {
-    console.error("Get Doctor Schedule Error:", error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Failed to retrieve doctor schedule",
       error: error.message,
@@ -101,14 +151,23 @@ const getDoctorSchedule = (req, res) => {
   }
 };
 
-// ============================================
-// POST: Create new schedule for a doctor
-// ============================================
-const createDoctorSchedule = (req, res) => {
+const createDoctorSchedule = async (req, res) => {
   try {
-    const { doctorId, dayOfWeek, startTime, endTime, slotDuration } = req.body;
+    const { dayOfWeek, startTime, endTime, slotDuration, scheduleDate, maxPatients } =
+      req.body;
+    const consultationFee = req.body.consultationFee;
+    let doctorId = req.body.doctorId;
 
-    // Validate required fields
+    if (req.user?.role === "doctor") {
+      if (!req.user.doctorId) {
+        return res.status(403).json({
+          success: false,
+          message: "Doctor account is not linked to a doctor profile",
+        });
+      }
+      doctorId = req.user.doctorId;
+    }
+
     if (!doctorId || !dayOfWeek || !startTime || !endTime) {
       return res.status(400).json({
         success: false,
@@ -117,63 +176,106 @@ const createDoctorSchedule = (req, res) => {
       });
     }
 
-    // Check if doctor exists
-    const doctor = db.prepare("SELECT doctor_id FROM doctors WHERE doctor_id = ?").get(doctorId);
+    const doctorRows = await query(
+      "SELECT doctor_id FROM doctors WHERE doctor_id = ? LIMIT 1",
+      [doctorId],
+    );
 
-    if (!doctor) {
+    if (doctorRows.length === 0) {
       return res.status(404).json({
         success: false,
         message: "Doctor not found",
       });
     }
 
-    // Check for schedule conflicts
-    const conflict = db.prepare(`
-      SELECT schedule_id FROM doctor_schedules
-       WHERE doctor_id = ?
-       AND day_of_week = ?
-       AND is_active = 1
-       AND (
-         (start_time <= ? AND end_time > ?) OR
-         (start_time < ? AND end_time >= ?) OR
-         (start_time >= ? AND end_time <= ?)
-       )
-    `).get(doctorId, dayOfWeek, startTime, startTime, endTime, endTime, startTime, endTime);
+    const conflicts = await query(
+      `
+      SELECT schedule_id
+      FROM doctor_schedules
+      WHERE doctor_id = ?
+        AND day_of_week = ?
+        AND is_active = 1
+        AND ((schedule_date IS NULL AND ? IS NULL) OR schedule_date = ?)
+        AND (
+          (start_time <= ? AND end_time > ?)
+          OR (start_time < ? AND end_time >= ?)
+          OR (start_time >= ? AND end_time <= ?)
+        )
+      LIMIT 1
+      `,
+      [
+        doctorId,
+        dayOfWeek,
+        scheduleDate || null,
+        scheduleDate || null,
+        startTime,
+        startTime,
+        endTime,
+        endTime,
+        startTime,
+        endTime,
+      ],
+    );
 
-    if (conflict) {
+    if (conflicts.length > 0) {
       return res.status(409).json({
         success: false,
-        message:
-          "Schedule conflict detected. This time slot overlaps with existing schedule.",
+        message: "Schedule conflict detected",
       });
     }
 
-    // Insert new schedule
-    const result = db.prepare(`
-      INSERT INTO doctor_schedules (doctor_id, day_of_week, start_time, end_time, slot_duration)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(doctorId, dayOfWeek, startTime, endTime, slotDuration || 30);
+    if (consultationFee !== undefined && consultationFee !== null && consultationFee !== "") {
+      const feeValue = Number(consultationFee);
 
-    // Retrieve the created schedule
-    const newSchedule = db.prepare("SELECT * FROM doctor_schedules WHERE schedule_id = ?").get(result.lastInsertRowid);
+      if (!Number.isFinite(feeValue) || feeValue < 0) {
+        return res.status(400).json({
+          success: false,
+          message: "consultationFee must be a positive number",
+        });
+      }
 
-    res.status(201).json({
+      await query("UPDATE doctors SET consultation_fee = ? WHERE doctor_id = ?", [
+        feeValue,
+        doctorId,
+      ]);
+    }
+
+    const result = await query(
+      `
+      INSERT INTO doctor_schedules
+      (doctor_id, day_of_week, start_time, end_time, slot_duration, schedule_date, max_patients)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      `,
+      [
+        doctorId,
+        dayOfWeek,
+        startTime,
+        endTime,
+        slotDuration || 30,
+        scheduleDate || null,
+        maxPatients || 10,
+      ],
+    );
+
+    const createdRows = await query(
+      "SELECT * FROM doctor_schedules WHERE schedule_id = ? LIMIT 1",
+      [result.insertId],
+    );
+
+    return res.status(201).json({
       success: true,
       message: "Schedule created successfully",
-      data: newSchedule,
+      data: createdRows[0],
     });
   } catch (error) {
-    console.error("Create Schedule Error:", error);
-
-    // Handle duplicate entry error
-    if (error.message.includes('UNIQUE constraint failed')) {
+    if (String(error.message).includes("Duplicate entry")) {
       return res.status(409).json({
         success: false,
-        message: "Schedule already exists for this doctor, day, and time",
+        message: "Schedule already exists for this doctor/day/time",
       });
     }
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Failed to create schedule",
       error: error.message,
@@ -181,25 +283,40 @@ const createDoctorSchedule = (req, res) => {
   }
 };
 
-// ============================================
-// PUT: Update existing doctor schedule
-// ============================================
-const updateDoctorSchedule = (req, res) => {
+const updateDoctorSchedule = async (req, res) => {
   try {
     const { scheduleId } = req.params;
-    const { dayOfWeek, startTime, endTime, slotDuration, isActive } = req.body;
+    const {
+      dayOfWeek,
+      startTime,
+      endTime,
+      slotDuration,
+      isActive,
+      maxPatients,
+    } = req.body;
 
-    // Check if schedule exists
-    const schedule = db.prepare("SELECT * FROM doctor_schedules WHERE schedule_id = ?").get(scheduleId);
+    const existing = await query(
+      "SELECT * FROM doctor_schedules WHERE schedule_id = ? LIMIT 1",
+      [scheduleId],
+    );
 
-    if (!schedule) {
+    if (existing.length === 0) {
       return res.status(404).json({
         success: false,
         message: "Schedule not found",
       });
     }
 
-    // Build update query dynamically
+    if (
+      req.user?.role === "doctor" &&
+      Number(existing[0].doctor_id) !== Number(req.user.doctorId)
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "You can update only your own schedule",
+      });
+    }
+
     const updates = [];
     const values = [];
 
@@ -219,6 +336,10 @@ const updateDoctorSchedule = (req, res) => {
       updates.push("slot_duration = ?");
       values.push(slotDuration);
     }
+    if (maxPatients) {
+      updates.push("max_patients = ?");
+      values.push(maxPatients);
+    }
     if (isActive !== undefined) {
       updates.push("is_active = ?");
       values.push(isActive ? 1 : 0);
@@ -233,20 +354,23 @@ const updateDoctorSchedule = (req, res) => {
 
     values.push(scheduleId);
 
-    // Update schedule
-    db.prepare(`UPDATE doctor_schedules SET ${updates.join(", ")} WHERE schedule_id = ?`).run(...values);
+    await query(
+      `UPDATE doctor_schedules SET ${updates.join(", ")} WHERE schedule_id = ?`,
+      values,
+    );
 
-    // Retrieve updated schedule
-    const updatedSchedule = db.prepare("SELECT * FROM doctor_schedules WHERE schedule_id = ?").get(scheduleId);
+    const updatedRows = await query(
+      "SELECT * FROM doctor_schedules WHERE schedule_id = ? LIMIT 1",
+      [scheduleId],
+    );
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: "Schedule updated successfully",
-      data: updatedSchedule,
+      data: updatedRows[0],
     });
   } catch (error) {
-    console.error("Update Schedule Error:", error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Failed to update schedule",
       error: error.message,
@@ -254,33 +378,43 @@ const updateDoctorSchedule = (req, res) => {
   }
 };
 
-// ============================================
-// DELETE: Delete doctor schedule
-// ============================================
-const deleteDoctorSchedule = (req, res) => {
+const deleteDoctorSchedule = async (req, res) => {
   try {
     const { scheduleId } = req.params;
 
-    // Check if schedule exists
-    const schedule = db.prepare("SELECT * FROM doctor_schedules WHERE schedule_id = ?").get(scheduleId);
+    const existing = await query(
+      "SELECT schedule_id, doctor_id FROM doctor_schedules WHERE schedule_id = ? LIMIT 1",
+      [scheduleId],
+    );
 
-    if (!schedule) {
+    if (existing.length === 0) {
       return res.status(404).json({
         success: false,
         message: "Schedule not found",
       });
     }
 
-    // Delete schedule (soft delete by setting is_active = FALSE is better)
-    db.prepare("UPDATE doctor_schedules SET is_active = 0 WHERE schedule_id = ?").run(scheduleId);
+    if (
+      req.user?.role === "doctor" &&
+      Number(existing[0].doctor_id) !== Number(req.user.doctorId)
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "You can delete only your own schedule",
+      });
+    }
 
-    res.status(200).json({
+    await query(
+      "UPDATE doctor_schedules SET is_active = 0 WHERE schedule_id = ?",
+      [scheduleId],
+    );
+
+    return res.status(200).json({
       success: true,
       message: "Schedule deleted successfully",
     });
   } catch (error) {
-    console.error("Delete Schedule Error:", error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Failed to delete schedule",
       error: error.message,
@@ -288,44 +422,76 @@ const deleteDoctorSchedule = (req, res) => {
   }
 };
 
-// ============================================
-// GET: Search doctors by specialization or department
-// ============================================
-const searchDoctors = (req, res) => {
+const searchDoctors = async (req, res) => {
   try {
     const { specialization, department, q } = req.query;
 
-    let query = "SELECT * FROM doctors WHERE is_available = 1";
+    if (req.user?.role === "doctor") {
+      if (!req.user.doctorId) {
+        return res.status(403).json({
+          success: false,
+          message: "Doctor account is not linked to a doctor profile",
+        });
+      }
+
+      let sql = "SELECT * FROM doctors WHERE is_available = 1 AND doctor_id = ?";
+      const params = [req.user.doctorId];
+
+      if (q) {
+        sql += " AND (name LIKE ? OR specialization LIKE ? OR department LIKE ?)";
+        const searchValue = `%${q}%`;
+        params.push(searchValue, searchValue, searchValue);
+      }
+
+      if (specialization) {
+        sql += " AND specialization LIKE ?";
+        params.push(`%${specialization}%`);
+      }
+
+      if (department) {
+        sql += " AND department LIKE ?";
+        params.push(`%${department}%`);
+      }
+
+      const doctors = await query(sql, params);
+
+      return res.status(200).json({
+        success: true,
+        count: doctors.length,
+        data: doctors,
+      });
+    }
+
+    let sql = "SELECT * FROM doctors WHERE is_available = 1";
     const params = [];
 
     if (q) {
-      query += " AND (name LIKE ? OR specialization LIKE ? OR department LIKE ?)";
+      sql += " AND (name LIKE ? OR specialization LIKE ? OR department LIKE ?)";
       const searchValue = `%${q}%`;
       params.push(searchValue, searchValue, searchValue);
     }
 
     if (specialization) {
-      query += " AND specialization LIKE ?";
+      sql += " AND specialization LIKE ?";
       params.push(`%${specialization}%`);
     }
 
     if (department) {
-      query += " AND department LIKE ?";
+      sql += " AND department LIKE ?";
       params.push(`%${department}%`);
     }
 
-    query += " ORDER BY name ASC";
+    sql += " ORDER BY name ASC";
 
-    const doctors = db.prepare(query).all(...params);
+    const doctors = await query(sql, params);
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       count: doctors.length,
       data: doctors,
     });
   } catch (error) {
-    console.error("Search Doctors Error:", error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Failed to search doctors",
       error: error.message,

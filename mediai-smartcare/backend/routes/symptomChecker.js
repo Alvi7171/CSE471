@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const symptomController = require("../controllers/symptomController");
+const { requireAuth, requireRole } = require("../middleware/authMiddleware");
 
 /**
  * AI Symptom Checker Routes
@@ -18,7 +19,12 @@ const symptomController = require("../controllers/symptomController");
  * @body    { patientName, age, gender, symptoms }
  * @access  Public
  */
-router.post("/check", symptomController.checkSymptoms);
+router.post(
+  "/check",
+  requireAuth,
+  requireRole("patient"),
+  symptomController.checkSymptoms,
+);
 
 /**
  * @route   POST /api/symptoms/triage
@@ -26,7 +32,12 @@ router.post("/check", symptomController.checkSymptoms);
  * @body    { symptoms }
  * @access  Public
  */
-router.post("/triage", symptomController.quickTriage);
+router.post(
+  "/triage",
+  requireAuth,
+  requireRole("patient"),
+  symptomController.quickTriage,
+);
 
 // ============================================
 // History & Records Routes
@@ -38,24 +49,35 @@ router.post("/triage", symptomController.quickTriage);
  * @query   patientName (optional), limit (optional)
  * @access  Public
  */
-router.get("/history", symptomController.getSymptomHistory);
-
-/**
- * @route   GET /api/symptoms/:checkId
- * @desc    Get specific symptom check by ID
- * @access  Public
- */
-router.get("/:checkId", symptomController.getSymptomCheckById);
-
-// ============================================
-// Statistics Routes
-// ============================================
+router.get(
+  "/history",
+  requireAuth,
+  requireRole("patient"),
+  symptomController.getSymptomHistory,
+);
 
 /**
  * @route   GET /api/symptoms/stats/overview
  * @desc    Get symptom check statistics
  * @access  Private (Admin)
  */
-router.get("/stats/overview", symptomController.getSymptomStatistics);
+router.get(
+  "/stats/overview",
+  requireAuth,
+  requireRole("admin"),
+  symptomController.getSymptomStatistics,
+);
+
+/**
+ * @route   GET /api/symptoms/:checkId
+ * @desc    Get specific symptom check by ID
+ * @access  Public
+ */
+router.get(
+  "/:checkId",
+  requireAuth,
+  requireRole("patient"),
+  symptomController.getSymptomCheckById,
+);
 
 module.exports = router;
