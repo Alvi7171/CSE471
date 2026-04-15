@@ -3,7 +3,6 @@ import SymptomChecker from "./components/SymptomChecker";
 import DoctorSchedule from "./components/DoctorSchedule";
 import PatientBooking from "./components/PatientBooking";
 import PatientRegistration from "./components/PatientRegistration";
-import MedicalTimeline from "./components/MedicalTimeline";
 import AnalyticsReports from "./components/AnalyticsReports";
 import "./index.css";
 
@@ -77,16 +76,6 @@ function App() {
               ✅ Patient Registration
             </button>
             <button
-              onClick={() => setActiveTab("timeline")}
-              className={`px-6 py-3 font-medium transition-all duration-300 rounded-t-lg whitespace-nowrap ${
-                activeTab === "timeline"
-                  ? "text-blue-600 bg-white/80 backdrop-blur-sm shadow-md border-b-2 border-blue-600"
-                  : "text-gray-600 hover:text-gray-800 hover:bg-white/40"
-              }`}
-            >
-              📋 Medical Timeline
-            </button>
-            <button
               onClick={() => setActiveTab("analytics")}
               className={`px-6 py-3 font-medium transition-all duration-300 rounded-t-lg whitespace-nowrap ${
                 activeTab === "analytics"
@@ -106,7 +95,6 @@ function App() {
         {activeTab === "schedule" && <DoctorSchedule />}
         {activeTab === "booking" && <PatientBooking />}
         {activeTab === "registration" && <PatientRegistration />}
-        {activeTab === "timeline" && <MedicalTimeline />}
         {activeTab === "analytics" && <AnalyticsReports />}
       </main>
 
