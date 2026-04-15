@@ -37,7 +37,6 @@ const safeExec = async (connection, sql) => {
     ) {
       return;
     }
-
     throw error;
   }
 };

@@ -8,6 +8,8 @@ const symptomRoutes = require("./routes/symptomChecker");
 const appointmentRoutes = require("./routes/appointments");
 const authRoutes = require("./routes/auth");
 const adminRoutes = require("./routes/admin");
+const patientRoutes = require("./routes/patients");
+const analyticsRoutes = require("./routes/analytics");
 
 // Initialize Express app
 const app = express();
@@ -50,10 +52,14 @@ app.get("/", (req, res) => {
     features: [
       "AI Symptom Checker & Triage System",
       "Doctor Scheduling & Availability Management",
+      "Patient Management & Medical Timeline",
+      "Hospital Analytics Reports & Dashboard",
     ],
     endpoints: {
       schedule: "/api/schedule",
       symptoms: "/api/symptoms",
+      patients: "/api/patients",
+      analytics: "/api/analytics",
     },
     status: "Running",
   });
@@ -76,6 +82,8 @@ app.use("/api/symptoms", symptomRoutes);
 app.use("/api/appointments", appointmentRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/patients", patientRoutes);
+app.use("/api/analytics", analyticsRoutes);
 
 // ============================================
 // Error Handling Middleware

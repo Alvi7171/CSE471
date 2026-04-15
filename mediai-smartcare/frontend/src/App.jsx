@@ -3,6 +3,8 @@ import SymptomChecker from "./components/SymptomChecker";
 import DoctorSchedule from "./components/DoctorSchedule";
 import PatientBooking from "./components/PatientBooking";
 import { authAPI } from "./services/api";
+import PatientRegistration from "./components/PatientRegistration";
+import AnalyticsReports from "./components/AnalyticsReports";
 import "./index.css";
 
 const DEPARTMENTS = [
@@ -31,6 +33,8 @@ const roleTabs = {
   doctor: [{ key: "schedule", label: "Doctor Schedule" }],
   admin: [
     { key: "schedule", label: "Doctor Schedule" },
+    { key: "registration", label: "Patient Registration" },
+    { key: "analytics", label: "Analytics Dashboard" },
     { key: "admin", label: "Admin Console" },
   ],
 };
@@ -511,7 +515,6 @@ function App() {
               </div>
             </div>
           )}
-
           {activeTab === "symptom" && user.role === "patient" && (
             <SymptomChecker />
           )}
@@ -522,6 +525,14 @@ function App() {
             (user.role === "doctor" || user.role === "admin") && (
               <DoctorSchedule currentUser={user} />
             )}
+
+          {activeTab === "registration" && user.role === "admin" && (
+            <PatientRegistration />
+          )}
+
+          {activeTab === "analytics" && user.role === "admin" && (
+            <AnalyticsReports />
+          )}
 
           {activeTab === "admin" && user.role === "admin" && (
             <div className="bg-white/85 backdrop-blur-md border border-white/70 rounded-2xl p-8 shadow-sm">
