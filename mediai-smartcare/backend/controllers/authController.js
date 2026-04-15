@@ -92,7 +92,10 @@ const register = async (req, res) => {
       });
     }
 
-    if ((normalizedRole === "doctor" || normalizedRole === "patient") && !cleanPhone) {
+    if (
+      (normalizedRole === "doctor" || normalizedRole === "patient") &&
+      !cleanPhone
+    ) {
       return res.status(400).json({
         success: false,
         message: "Mobile number is required",
@@ -170,7 +173,12 @@ const register = async (req, res) => {
       const patientAge = Number(age || 0);
       const cleanGender = normalizeOptional(gender);
 
-      if (!cleanAddress || !cleanGender || !Number.isFinite(patientAge) || patientAge <= 0) {
+      if (
+        !cleanAddress ||
+        !cleanGender ||
+        !Number.isFinite(patientAge) ||
+        patientAge <= 0
+      ) {
         return res.status(400).json({
           success: false,
           message: "Patient registration requires address, age and gender",
@@ -239,7 +247,8 @@ const login = async (req, res) => {
       });
     }
 
-    const loginIdentifier = normalizeOptional(identifier) || normalizeOptional(email);
+    const loginIdentifier =
+      normalizeOptional(identifier) || normalizeOptional(email);
 
     const rows = await query(
       `

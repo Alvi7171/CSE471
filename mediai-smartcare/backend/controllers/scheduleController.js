@@ -153,8 +153,14 @@ const getDoctorSchedule = async (req, res) => {
 
 const createDoctorSchedule = async (req, res) => {
   try {
-    const { dayOfWeek, startTime, endTime, slotDuration, scheduleDate, maxPatients } =
-      req.body;
+    const {
+      dayOfWeek,
+      startTime,
+      endTime,
+      slotDuration,
+      scheduleDate,
+      maxPatients,
+    } = req.body;
     const consultationFee = req.body.consultationFee;
     let doctorId = req.body.doctorId;
 
@@ -224,7 +230,11 @@ const createDoctorSchedule = async (req, res) => {
       });
     }
 
-    if (consultationFee !== undefined && consultationFee !== null && consultationFee !== "") {
+    if (
+      consultationFee !== undefined &&
+      consultationFee !== null &&
+      consultationFee !== ""
+    ) {
       const feeValue = Number(consultationFee);
 
       if (!Number.isFinite(feeValue) || feeValue < 0) {
@@ -234,10 +244,10 @@ const createDoctorSchedule = async (req, res) => {
         });
       }
 
-      await query("UPDATE doctors SET consultation_fee = ? WHERE doctor_id = ?", [
-        feeValue,
-        doctorId,
-      ]);
+      await query(
+        "UPDATE doctors SET consultation_fee = ? WHERE doctor_id = ?",
+        [feeValue, doctorId],
+      );
     }
 
     const result = await query(
@@ -434,11 +444,13 @@ const searchDoctors = async (req, res) => {
         });
       }
 
-      let sql = "SELECT * FROM doctors WHERE is_available = 1 AND doctor_id = ?";
+      let sql =
+        "SELECT * FROM doctors WHERE is_available = 1 AND doctor_id = ?";
       const params = [req.user.doctorId];
 
       if (q) {
-        sql += " AND (name LIKE ? OR specialization LIKE ? OR department LIKE ?)";
+        sql +=
+          " AND (name LIKE ? OR specialization LIKE ? OR department LIKE ?)";
         const searchValue = `%${q}%`;
         params.push(searchValue, searchValue, searchValue);
       }

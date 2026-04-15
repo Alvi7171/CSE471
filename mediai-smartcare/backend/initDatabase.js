@@ -32,7 +32,9 @@ const safeExec = async (connection, sql) => {
       "doesn't exist",
     ];
 
-    if (ignoredPatterns.some((pattern) => String(error.message).includes(pattern))) {
+    if (
+      ignoredPatterns.some((pattern) => String(error.message).includes(pattern))
+    ) {
       return;
     }
 
@@ -59,23 +61,41 @@ const run = async () => {
     }
 
     // Railway-safe incremental migration for already-created tables.
-    await safeExec(connection, "ALTER TABLE users MODIFY email VARCHAR(120) NULL");
+    await safeExec(
+      connection,
+      "ALTER TABLE users MODIFY email VARCHAR(120) NULL",
+    );
     if (!(await hasColumn(connection, "users", "address"))) {
-      await safeExec(connection, "ALTER TABLE users ADD COLUMN address VARCHAR(255) NULL");
+      await safeExec(
+        connection,
+        "ALTER TABLE users ADD COLUMN address VARCHAR(255) NULL",
+      );
     }
     if (!(await hasColumn(connection, "users", "age"))) {
       await safeExec(connection, "ALTER TABLE users ADD COLUMN age INT NULL");
     }
     if (!(await hasColumn(connection, "users", "gender"))) {
-      await safeExec(connection, "ALTER TABLE users ADD COLUMN gender ENUM('Male', 'Female', 'Other') NULL");
+      await safeExec(
+        connection,
+        "ALTER TABLE users ADD COLUMN gender ENUM('Male', 'Female', 'Other') NULL",
+      );
     }
 
-    await safeExec(connection, "ALTER TABLE doctors MODIFY email VARCHAR(100) NULL");
+    await safeExec(
+      connection,
+      "ALTER TABLE doctors MODIFY email VARCHAR(100) NULL",
+    );
     if (!(await hasColumn(connection, "doctors", "degree"))) {
-      await safeExec(connection, "ALTER TABLE doctors ADD COLUMN degree VARCHAR(120) NULL");
+      await safeExec(
+        connection,
+        "ALTER TABLE doctors ADD COLUMN degree VARCHAR(120) NULL",
+      );
     }
     if (!(await hasColumn(connection, "doctors", "medical_name"))) {
-      await safeExec(connection, "ALTER TABLE doctors ADD COLUMN medical_name VARCHAR(180) NULL");
+      await safeExec(
+        connection,
+        "ALTER TABLE doctors ADD COLUMN medical_name VARCHAR(180) NULL",
+      );
     }
 
     await safeExec(

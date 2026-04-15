@@ -81,7 +81,8 @@ function App() {
         const response = await authAPI.me();
         if (response.success) {
           setUser(response.user);
-          const defaultTab = roleTabs[response.user.role]?.[0]?.key || "symptom";
+          const defaultTab =
+            roleTabs[response.user.role]?.[0]?.key || "symptom";
           setActiveTab(defaultTab);
         }
       } catch (error) {
@@ -347,7 +348,9 @@ function App() {
     return (
       <div className="min-h-screen theme-bg flex items-center justify-center p-6">
         <div className="w-full max-w-2xl bg-white/85 backdrop-blur-md rounded-3xl border border-white/60 shadow-2xl p-8">
-          <h1 className="text-3xl font-bold text-theme-primary mb-2">MediAI SmartCare</h1>
+          <h1 className="text-3xl font-bold text-theme-primary mb-2">
+            MediAI SmartCare
+          </h1>
           <p className="text-sm text-gray-600 mb-6">
             Railway-ready hospital system with role-based access
           </p>
@@ -355,7 +358,9 @@ function App() {
           <div className="flex rounded-xl bg-theme-soft p-1 mb-5">
             <button
               className={`flex-1 py-2 rounded-lg text-sm font-semibold ${
-                authMode === "login" ? "bg-white text-theme-primary shadow" : "text-gray-600"
+                authMode === "login"
+                  ? "bg-white text-theme-primary shadow"
+                  : "text-gray-600"
               }`}
               onClick={() => {
                 setAuthMode("login");
@@ -366,7 +371,9 @@ function App() {
             </button>
             <button
               className={`flex-1 py-2 rounded-lg text-sm font-semibold ${
-                authMode === "register" ? "bg-white text-theme-primary shadow" : "text-gray-600"
+                authMode === "register"
+                  ? "bg-white text-theme-primary shadow"
+                  : "text-gray-600"
               }`}
               onClick={() => {
                 setAuthMode("register");
@@ -474,8 +481,12 @@ function App() {
         <section className="p-4 md:p-8">
           <header className="bg-white/85 backdrop-blur-md border border-white/70 rounded-2xl px-6 py-4 shadow-sm flex items-center justify-between mb-4">
             <div>
-              <p className="text-sm uppercase tracking-widest text-gray-500">{user.role}</p>
-              <h2 className="text-xl font-semibold text-theme-primary">{user.fullName}</h2>
+              <p className="text-sm uppercase tracking-widest text-gray-500">
+                {user.role}
+              </p>
+              <h2 className="text-xl font-semibold text-theme-primary">
+                {user.fullName}
+              </h2>
             </div>
             <button
               onClick={handleLogout}
@@ -501,17 +512,25 @@ function App() {
             </div>
           )}
 
-          {activeTab === "symptom" && user.role === "patient" && <SymptomChecker />}
-          {activeTab === "booking" && user.role === "patient" && <PatientBooking />}
-          {activeTab === "schedule" && (user.role === "doctor" || user.role === "admin") && (
-            <DoctorSchedule currentUser={user} />
+          {activeTab === "symptom" && user.role === "patient" && (
+            <SymptomChecker />
           )}
+          {activeTab === "booking" && user.role === "patient" && (
+            <PatientBooking />
+          )}
+          {activeTab === "schedule" &&
+            (user.role === "doctor" || user.role === "admin") && (
+              <DoctorSchedule currentUser={user} />
+            )}
 
           {activeTab === "admin" && user.role === "admin" && (
             <div className="bg-white/85 backdrop-blur-md border border-white/70 rounded-2xl p-8 shadow-sm">
-              <h3 className="text-2xl font-semibold text-theme-primary mb-3">Admin Console</h3>
+              <h3 className="text-2xl font-semibold text-theme-primary mb-3">
+                Admin Console
+              </h3>
               <p className="text-gray-700 mb-4">
-                Admin area is ready. You can add user management, reports, and operational tools next.
+                Admin area is ready. You can add user management, reports, and
+                operational tools next.
               </p>
               <ul className="text-gray-700 space-y-2 list-disc pl-5">
                 <li>Manage doctors and role assignments</li>

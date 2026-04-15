@@ -1,7 +1,10 @@
 const axios = require("axios");
 require("dotenv").config();
 
-const { TRIAGE_KNOWLEDGE, BASE_GUARDRAILS } = require("../knowledge/triageKnowledge");
+const {
+  TRIAGE_KNOWLEDGE,
+  BASE_GUARDRAILS,
+} = require("../knowledge/triageKnowledge");
 
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 const MODEL_CANDIDATES = (
@@ -20,7 +23,8 @@ const buildKnowledgeContext = (symptoms, age, gender) => {
     entry.triggers.some((trigger) => text.includes(trigger.toLowerCase())),
   );
 
-  const selected = matched.length > 0 ? matched.slice(0, 4) : TRIAGE_KNOWLEDGE.slice(0, 2);
+  const selected =
+    matched.length > 0 ? matched.slice(0, 4) : TRIAGE_KNOWLEDGE.slice(0, 2);
 
   return {
     patientProfile: {
@@ -54,16 +58,24 @@ const applyDeterministicOverrides = (symptoms, analysis) => {
     "loss of consciousness",
   ]);
 
-  const breathingRedFlag = hasAny(["cannot breathe", "breathing difficulty", "blue lips"]);
+  const breathingRedFlag = hasAny([
+    "cannot breathe",
+    "breathing difficulty",
+    "blue lips",
+  ]);
 
   if (emergencyCardiac || emergencyNeuro || breathingRedFlag) {
     next.urgencyLevel = "Emergency";
     if (!next.warning) {
-      next.warning = "Red-flag symptoms detected. Seek emergency medical care immediately.";
+      next.warning =
+        "Red-flag symptoms detected. Seek emergency medical care immediately.";
     }
   }
 
-  if (!next.recommendedSpecialist || next.recommendedSpecialist === "specialist name") {
+  if (
+    !next.recommendedSpecialist ||
+    next.recommendedSpecialist === "specialist name"
+  ) {
     if (hasAny(["chest pain", "palpitations"])) {
       next.recommendedSpecialist = "Cardiologist";
     } else if (hasAny(["headache", "seizure", "weakness"])) {
@@ -120,7 +132,9 @@ const requestGroqWithFallback = async (apiKey, messages) => {
       lastError = error;
       const isModelIssue =
         String(error.response?.data?.error?.code || "").includes("model") ||
-        String(error.response?.data?.error?.message || "").toLowerCase().includes("model");
+        String(error.response?.data?.error?.message || "")
+          .toLowerCase()
+          .includes("model");
 
       if (!isModelIssue) {
         break;
@@ -180,7 +194,10 @@ Follow these rules:
     } catch (parseError) {
       const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
-        analysis = applyDeterministicOverrides(symptoms, JSON.parse(jsonMatch[0]));
+        analysis = applyDeterministicOverrides(
+          symptoms,
+          JSON.parse(jsonMatch[0]),
+        );
       } else {
         throw parseError;
       }

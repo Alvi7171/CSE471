@@ -235,12 +235,7 @@ exports.bookAppointment = async (req, res) => {
     const patientPhone = patient.phone || null;
     const patientEmail = patient.email || null;
 
-    if (
-      !scheduleId ||
-      !doctorId ||
-      !appointmentDate ||
-      !appointmentTime
-    ) {
+    if (!scheduleId || !doctorId || !appointmentDate || !appointmentTime) {
       return res.status(400).json({
         success: false,
         message: "Missing required fields",

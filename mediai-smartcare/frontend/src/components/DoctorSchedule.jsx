@@ -209,7 +209,10 @@ const DoctorSchedule = ({ currentUser }) => {
                     onKeyDown={(e) => e.key === "Enter" && handleSearch()}
                     className="input-field text-sm"
                   />
-                  <button onClick={handleSearch} className="btn-primary text-sm">
+                  <button
+                    onClick={handleSearch}
+                    className="btn-primary text-sm"
+                  >
                     🔍
                   </button>
                 </div>
@@ -235,7 +238,9 @@ const DoctorSchedule = ({ currentUser }) => {
                       <p className="text-sm text-gray-600">
                         {doctor.specialization}
                       </p>
-                      <p className="text-sm text-gray-500">{doctor.department}</p>
+                      <p className="text-sm text-gray-500">
+                        {doctor.department}
+                      </p>
                       <p className="text-sm text-primary font-medium mt-1">
                         ৳{doctor.consultation_fee}
                       </p>
@@ -446,9 +451,9 @@ const DoctorSchedule = ({ currentUser }) => {
                                     ? "bg-green-100 text-green-800"
                                     : apt.status === "declined"
                                       ? "bg-red-100 text-red-800"
-                                    : apt.status === "cancelled"
-                                      ? "bg-red-100 text-red-800"
-                                      : "bg-gray-100 text-gray-800"
+                                      : apt.status === "cancelled"
+                                        ? "bg-red-100 text-red-800"
+                                        : "bg-gray-100 text-gray-800"
                               }`}
                             >
                               {apt.status}
