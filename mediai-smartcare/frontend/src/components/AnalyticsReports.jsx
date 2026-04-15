@@ -196,7 +196,7 @@ function AnalyticsReports() {
       </div>
 
       {/* Patient Search & Timeline Drill-down */}
-      <div className="bg-white/70 backdrop-blur-md rounded-xl border border-white/60 shadow-lg p-6 mb-8">
+      <div className="bg-white/70 backdrop-blur-md rounded-xl border border-white/60 shadow-lg p-6 mb-8 pb-80">
         <h3 className="text-lg font-bold text-gray-800 mb-4">🔍 Patient Search & Medical Timeline</h3>
         <div className="relative">
           <input
@@ -209,18 +209,18 @@ function AnalyticsReports() {
           
           {/* Search Results Dropdown */}
           {patientSearchResults.length > 0 && (
-            <div className="absolute top-full left-0 right-0 bg-white border border-gray-300 rounded-lg shadow-lg mt-2 z-50 max-h-64 overflow-y-auto">
+            <div className="absolute top-full left-0 right-0 bg-white border-2 border-blue-400 rounded-lg shadow-2xl mt-1 z-[9999] max-h-80 overflow-y-auto">
               {patientSearchResults.map((patient) => (
                 <button
                   key={patient.patient_id}
                   onClick={() => handleSelectPatient(patient)}
-                  className="w-full text-left px-4 py-3 hover:bg-blue-50 border-b border-gray-200 last:border-b-0 transition-colors"
+                  className="w-full text-left px-4 py-3 hover:bg-blue-100 border-b border-gray-200 last:border-b-0 transition-colors font-medium hover:shadow-md"
                 >
                   <div className="font-semibold text-gray-800">
                     {patient.first_name} {patient.last_name}
                   </div>
                   <div className="text-sm text-gray-600">
-                    <span className="text-blue-600 font-mono">{patient.smart_patient_id}</span> • {patient.phone_number}
+                    <span className="text-blue-600 font-mono font-bold">{patient.smart_patient_id}</span> • {patient.phone_number}
                   </div>
                 </button>
               ))}
