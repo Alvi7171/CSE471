@@ -74,6 +74,28 @@ try {
   `);
   console.log("✅ Created time_slots table");
 
+  // Create appointments table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS appointments (
+      appointment_id INTEGER PRIMARY KEY AUTOINCREMENT,
+      schedule_id INTEGER NOT NULL,
+      doctor_id INTEGER NOT NULL,
+      patient_name TEXT NOT NULL,
+      patient_age INTEGER,
+      patient_gender TEXT,
+      patient_phone TEXT,
+      patient_email TEXT,
+      symptoms TEXT,
+      appointment_date TEXT NOT NULL,
+      appointment_time TEXT NOT NULL,
+      status TEXT DEFAULT 'pending',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (schedule_id) REFERENCES doctor_schedules(schedule_id),
+      FOREIGN KEY (doctor_id) REFERENCES doctors(doctor_id)
+    );
+  `);
+  console.log("✅ Created appointments table");
+
   // Insert sample doctors
   const insertDoctor = db.prepare(`
     INSERT OR IGNORE INTO doctors (name, email, phone, specialization, department, qualification, experience_years, consultation_fee)

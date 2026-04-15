@@ -2,6 +2,9 @@ import React, { useState } from "react";
 import SymptomChecker from "./components/SymptomChecker";
 import DoctorSchedule from "./components/DoctorSchedule";
 import PatientBooking from "./components/PatientBooking";
+import PatientRegistration from "./components/PatientRegistration";
+import MedicalTimeline from "./components/MedicalTimeline";
+import AnalyticsReports from "./components/AnalyticsReports";
 import "./index.css";
 
 function App() {
@@ -32,10 +35,10 @@ function App() {
       {/* Navigation Tabs */}
       <nav className="bg-white/60 backdrop-blur-lg border-b border-white/30 sticky top-[73px] z-40 shadow-sm">
         <div className="max-w-7xl mx-auto px-6">
-          <div className="flex gap-2">
+          <div className="flex gap-2 overflow-x-auto pb-0">
             <button
               onClick={() => setActiveTab("symptom")}
-              className={`px-6 py-3 font-medium transition-all duration-300 rounded-t-lg ${
+              className={`px-6 py-3 font-medium transition-all duration-300 rounded-t-lg whitespace-nowrap ${
                 activeTab === "symptom"
                   ? "text-blue-600 bg-white/80 backdrop-blur-sm shadow-md border-b-2 border-blue-600"
                   : "text-gray-600 hover:text-gray-800 hover:bg-white/40"
@@ -45,7 +48,7 @@ function App() {
             </button>
             <button
               onClick={() => setActiveTab("schedule")}
-              className={`px-6 py-3 font-medium transition-all duration-300 rounded-t-lg ${
+              className={`px-6 py-3 font-medium transition-all duration-300 rounded-t-lg whitespace-nowrap ${
                 activeTab === "schedule"
                   ? "text-blue-600 bg-white/80 backdrop-blur-sm shadow-md border-b-2 border-blue-600"
                   : "text-gray-600 hover:text-gray-800 hover:bg-white/40"
@@ -55,13 +58,43 @@ function App() {
             </button>
             <button
               onClick={() => setActiveTab("booking")}
-              className={`px-6 py-3 font-medium transition-all duration-300 rounded-t-lg ${
+              className={`px-6 py-3 font-medium transition-all duration-300 rounded-t-lg whitespace-nowrap ${
                 activeTab === "booking"
                   ? "text-blue-600 bg-white/80 backdrop-blur-sm shadow-md border-b-2 border-blue-600"
                   : "text-gray-600 hover:text-gray-800 hover:bg-white/40"
               }`}
             >
               📅 Book Appointment
+            </button>
+            <button
+              onClick={() => setActiveTab("registration")}
+              className={`px-6 py-3 font-medium transition-all duration-300 rounded-t-lg whitespace-nowrap ${
+                activeTab === "registration"
+                  ? "text-blue-600 bg-white/80 backdrop-blur-sm shadow-md border-b-2 border-blue-600"
+                  : "text-gray-600 hover:text-gray-800 hover:bg-white/40"
+              }`}
+            >
+              ✅ Patient Registration
+            </button>
+            <button
+              onClick={() => setActiveTab("timeline")}
+              className={`px-6 py-3 font-medium transition-all duration-300 rounded-t-lg whitespace-nowrap ${
+                activeTab === "timeline"
+                  ? "text-blue-600 bg-white/80 backdrop-blur-sm shadow-md border-b-2 border-blue-600"
+                  : "text-gray-600 hover:text-gray-800 hover:bg-white/40"
+              }`}
+            >
+              📋 Medical Timeline
+            </button>
+            <button
+              onClick={() => setActiveTab("analytics")}
+              className={`px-6 py-3 font-medium transition-all duration-300 rounded-t-lg whitespace-nowrap ${
+                activeTab === "analytics"
+                  ? "text-blue-600 bg-white/80 backdrop-blur-sm shadow-md border-b-2 border-blue-600"
+                  : "text-gray-600 hover:text-gray-800 hover:bg-white/40"
+              }`}
+            >
+              📊 Analytics Dashboard
             </button>
           </div>
         </div>
@@ -72,6 +105,9 @@ function App() {
         {activeTab === "symptom" && <SymptomChecker />}
         {activeTab === "schedule" && <DoctorSchedule />}
         {activeTab === "booking" && <PatientBooking />}
+        {activeTab === "registration" && <PatientRegistration />}
+        {activeTab === "timeline" && <MedicalTimeline />}
+        {activeTab === "analytics" && <AnalyticsReports />}
       </main>
 
       {/* Footer */}
