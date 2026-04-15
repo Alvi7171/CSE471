@@ -202,4 +202,63 @@ router.get("/diagnostics", (req, res) => {
   }
 });
 
+/**
+ * @route   GET /analytics/search/patients
+ * @desc    Search for patients by name or ID
+ * @query   q (required) - Search query (patient name or Smart ID)
+ * @access  Public
+ */
+router.get("/search/patients", (req, res) => {
+  try {
+    const { q } = req.query;
+
+    if (!q) {
+      return res.status(400).json({
+        success: false,
+        error: "Search query (q) is required",
+      });
+    }
+
+    const results = analyticsController.searchPatients(q);
+    res.json({
+      success: true,
+      data: results,
+    });
+  } catch (error) {
+    console.error("Error searching patients:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to search patients",
+    });
+  }
+});
+
+/**
+ * @route   GET /analytics/patient/:patientId
+ * @desc    Get patient's medical timeline and analytics contribution
+ * @params  patientId (Can be numeric ID or Smart Patient ID)
+ * @access  Public
+ */
+router.get("/patient/:patientId", (req, res) => {
+  try {
+    const { patientId } = req.params;
+    const result = analyticsController.getPatientAnalytics(patientId);
+
+    if (result.error) {
+      return res.status(404).json({
+        success: false,
+        error: result.error,
+      });
+    }
+
+    res.json(result);
+  } catch (error) {
+    console.error("Error fetching patient analytics:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to fetch patient analytics",
+    });
+  }
+});
+
 module.exports = router;

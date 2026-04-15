@@ -16,6 +16,13 @@ function AnalyticsReports() {
   const [error, setError] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  
+  // Patient search states
+  const [patientSearchQuery, setPatientSearchQuery] = useState("");
+  const [patientSearchResults, setPatientSearchResults] = useState([]);
+  const [selectedPatient, setSelectedPatient] = useState(null);
+  const [patientAnalytics, setPatientAnalytics] = useState(null);
+  const [searchLoading, setSearchLoading] = useState(false);
 
   // Initialize date range (last 30 days)
   useEffect(() => {
@@ -82,6 +89,53 @@ function AnalyticsReports() {
     setStartDate(lastMonth.toISOString().split("T")[0]);
   };
 
+  // Search for patients
+  const handlePatientSearch = async (query) => {
+    setPatientSearchQuery(query);
+    if (query.trim().length === 0) {
+      setPatientSearchResults([]);
+      return;
+    }
+
+    try {
+      setSearchLoading(true);
+      const response = await axios.get(
+        `${API_BASE_URL}/analytics/search/patients?q=${encodeURIComponent(query)}`
+      );
+      setPatientSearchResults(response.data.data || []);
+    } catch (err) {
+      console.error("Error searching patients:", err);
+      setPatientSearchResults([]);
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
+  // Load selected patient's details and timeline
+  const handleSelectPatient = async (patient) => {
+    setSelectedPatient(patient);
+    setPatientSearchResults([]);
+    setPatientSearchQuery("");
+
+    try {
+      setSearchLoading(true);
+      const response = await axios.get(
+        `${API_BASE_URL}/analytics/patient/${patient.smart_patient_id || patient.patient_id}`
+      );
+      setPatientAnalytics(response.data);
+    } catch (err) {
+      console.error("Error loading patient details:", err);
+      setError("Failed to load patient details");
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
+  const handleClearPatient = () => {
+    setSelectedPatient(null);
+    setPatientAnalytics(null);
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-6 py-8">
       {/* Header */}
@@ -140,6 +194,50 @@ function AnalyticsReports() {
           </div>
         )}
       </div>
+
+      {/* Patient Search & Timeline Drill-down */}
+      <div className="bg-white/70 backdrop-blur-md rounded-xl border border-white/60 shadow-lg p-6 mb-8">
+        <h3 className="text-lg font-bold text-gray-800 mb-4">🔍 Patient Search & Medical Timeline</h3>
+        <div className="relative">
+          <input
+            type="text"
+            placeholder="Search by patient name or Smart ID (SPC-XXXXX)..."
+            value={patientSearchQuery}
+            onChange={(e) => handlePatientSearch(e.target.value)}
+            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          
+          {/* Search Results Dropdown */}
+          {patientSearchResults.length > 0 && (
+            <div className="absolute top-full left-0 right-0 bg-white border border-gray-300 rounded-lg shadow-lg mt-2 z-50 max-h-64 overflow-y-auto">
+              {patientSearchResults.map((patient) => (
+                <button
+                  key={patient.patient_id}
+                  onClick={() => handleSelectPatient(patient)}
+                  className="w-full text-left px-4 py-3 hover:bg-blue-50 border-b border-gray-200 last:border-b-0 transition-colors"
+                >
+                  <div className="font-semibold text-gray-800">
+                    {patient.first_name} {patient.last_name}
+                  </div>
+                  <div className="text-sm text-gray-600">
+                    <span className="text-blue-600 font-mono">{patient.smart_patient_id}</span> • {patient.phone_number}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Selected Patient Medical Timeline */}
+      {selectedPatient && patientAnalytics && (
+        <PatientTimelineView 
+          patient={patientAnalytics.patient}
+          timeline={patientAnalytics.medicalTimeline}
+          contribution={patientAnalytics.analyticsContribution}
+          onClose={handleClearPatient}
+        />
+      )}
 
       {/* Summary Cards */}
       {analytics && (
@@ -773,6 +871,135 @@ function DiagnosticsView({ diagnostics }) {
             </p>
           </div>
           <div className="text-5xl">🔬</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Patient Timeline Component
+function PatientTimelineView({ patient, timeline, contribution, onClose }) {
+  return (
+    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border-2 border-blue-300 shadow-xl p-8 mb-8">
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h2 className="text-3xl font-bold text-gray-800 mb-2">
+            👤 {patient.firstName} {patient.lastName}
+          </h2>
+          <p className="text-gray-600">
+            <span className="font-mono bg-white px-3 py-1 rounded text-blue-600 font-semibold">{patient.smartPatientId}</span>
+            {" "}• Gender: {patient.gender} • Blood Type: {patient.bloodType}
+          </p>
+        </div>
+        <button
+          onClick={onClose}
+          className="px-6 py-2 bg-red-500 text-white font-medium rounded-lg hover:bg-red-600 transition-colors"
+        >
+          ✕ Close
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        {/* Contribution Stats */}
+        <div className="bg-white rounded-lg shadow p-4 border-l-4 border-blue-500">
+          <div className="text-sm text-gray-600 mb-1">Registered</div>
+          <p className="text-2xl font-bold text-gray-800">
+            {new Date(patient.registrationDate).toLocaleDateString()}
+          </p>
+        </div>
+        <div className="bg-white rounded-lg shadow p-4 border-l-4 border-green-500">
+          <div className="text-sm text-gray-600 mb-1">Total Visits</div>
+          <p className="text-2xl font-bold text-green-600">{contribution.visitCount}</p>
+        </div>
+        <div className="bg-white rounded-lg shadow p-4 border-l-4 border-purple-500">
+          <div className="text-sm text-gray-600 mb-1">Total Diagnostics</div>
+          <p className="text-2xl font-bold text-purple-600">{contribution.diagnosticCount}</p>
+        </div>
+      </div>
+
+      {/* Medical Timeline */}
+      <div className="space-y-6">
+        {/* Visits */}
+        <div>
+          <h3 className="text-xl font-bold text-gray-800 mb-4">📋 Recent Medical Visits</h3>
+          {timeline.visits && timeline.visits.length > 0 ? (
+            <div className="space-y-3">
+              {timeline.visits.map((visit) => (
+                <div
+                  key={visit.visit_id}
+                  className="bg-white p-4 rounded-lg border-l-4 border-blue-500 hover:shadow-md transition-shadow"
+                >
+                  <div className="flex justify-between items-start mb-2">
+                    <div className="font-semibold text-gray-800">{visit.reason_for_visit}</div>
+                    <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
+                      visit.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                    }`}>
+                      {visit.status}
+                    </span>
+                  </div>
+                  <p className="text-sm text-gray-600">{new Date(visit.visit_date).toLocaleDateString()}</p>
+                  {visit.notes && <p className="text-sm text-gray-700 mt-2 italic">Notes: {visit.notes}</p>}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-gray-500 italic">No visit records found</p>
+          )}
+        </div>
+
+        {/* Diagnostics */}
+        <div>
+          <h3 className="text-xl font-bold text-gray-800 mb-4">🔬 Recent Diagnostic Reports</h3>
+          {timeline.diagnostics && timeline.diagnostics.length > 0 ? (
+            <div className="space-y-3">
+              {timeline.diagnostics.map((diag) => (
+                <div
+                  key={diag.report_id}
+                  className="bg-white p-4 rounded-lg border-l-4 border-purple-500 hover:shadow-md transition-shadow"
+                >
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <div className="font-semibold text-gray-800">{diag.report_type}</div>
+                      <p className="text-sm text-gray-600">{new Date(diag.report_date).toLocaleDateString()}</p>
+                    </div>
+                    <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
+                      diag.urgency_level === 'Critical' ? 'bg-red-100 text-red-700' :
+                      diag.urgency_level === 'High' ? 'bg-orange-100 text-orange-700' :
+                      'bg-green-100 text-green-700'
+                    }`}>
+                      {diag.urgency_level}
+                    </span>
+                  </div>
+                  {diag.findings && <p className="text-sm text-gray-700">Findings: {diag.findings}</p>}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-gray-500 italic">No diagnostic reports found</p>
+          )}
+        </div>
+
+        {/* Contact Info */}
+        <div className="bg-white rounded-lg p-4 border-l-4 border-indigo-500">
+          <h4 className="font-semibold text-gray-800 mb-3">📞 Contact Information</h4>
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <p className="text-gray-600">Phone</p>
+              <p className="text-gray-800 font-semibold">{patient.phoneNumber}</p>
+            </div>
+            <div>
+              <p className="text-gray-600">Email</p>
+              <p className="text-gray-800 font-semibold">{patient.email || 'N/A'}</p>
+            </div>
+            <div>
+              <p className="text-gray-600">Date of Birth</p>
+              <p className="text-gray-800 font-semibold">{new Date(patient.dateOfBirth).toLocaleDateString()}</p>
+            </div>
+            <div>
+              <p className="text-gray-600">Blood Type</p>
+              <p className="text-gray-800 font-semibold">{patient.bloodType}</p>
+            </div>
+          </div>
         </div>
       </div>
     </div>

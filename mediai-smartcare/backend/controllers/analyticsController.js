@@ -390,6 +390,170 @@ const getDiagnosticStatistics = (startDate, endDate) => {
   }
 };
 
+/**
+ * Search for patients by name or ID
+ * @param {string} searchQuery - Patient name or Smart Patient ID
+ */
+const searchPatients = (searchQuery) => {
+  try {
+    if (!searchQuery || searchQuery.trim().length === 0) {
+      return [];
+    }
+
+    const query = `
+      SELECT 
+        patient_id,
+        smart_patient_id,
+        first_name,
+        last_name,
+        gender,
+        blood_type,
+        phone_number,
+        email,
+        date_of_birth,
+        registration_date
+      FROM patients
+      WHERE 
+        smart_patient_id LIKE ? 
+        OR first_name LIKE ? 
+        OR last_name LIKE ?
+      LIMIT 20
+    `;
+
+    const searchTerm = `%${searchQuery}%`;
+    const results = db.prepare(query).all(searchTerm, searchTerm, searchTerm);
+    
+    return results || [];
+  } catch (error) {
+    console.error("Error searching patients:", error);
+    throw error;
+  }
+};
+
+/**
+ * Get individual patient's medical timeline and analytics contribution
+ * @param {number|string} patientId - Patient ID or Smart Patient ID
+ */
+const getPatientAnalytics = (patientId) => {
+  try {
+    // Get patient info
+    let patientQuery = `
+      SELECT * FROM patients 
+      WHERE patient_id = ? OR smart_patient_id = ?
+    `;
+    const patient = db.prepare(patientQuery).get(patientId, patientId);
+
+    if (!patient) {
+      return { error: "Patient not found" };
+    }
+
+    // Get patient's medical visits
+    const visitsQuery = `
+      SELECT 
+        visit_id,
+        patient_id,
+        doctor_id,
+        visit_date,
+        reason_for_visit,
+        status,
+        notes
+      FROM medical_visits
+      WHERE patient_id = ?
+      ORDER BY visit_date DESC
+    `;
+    const visits = db.prepare(visitsQuery).all(patient.patient_id) || [];
+
+    // Get patient's diagnostic reports
+    const diagnosticsQuery = `
+      SELECT 
+        report_id,
+        patient_id,
+        doctor_id,
+        report_date,
+        report_type,
+        findings,
+        urgency_level
+      FROM diagnostic_reports
+      WHERE patient_id = ?
+      ORDER BY report_date DESC
+    `;
+    const diagnostics = db.prepare(diagnosticsQuery).all(patient.patient_id) || [];
+
+    // Get patient's prescriptions
+    const prescriptionsQuery = `
+      SELECT 
+        prescription_id,
+        patient_id,
+        doctor_id,
+        prescription_date,
+        medication_name,
+        dosage,
+        duration_days,
+        status
+      FROM prescriptions
+      WHERE patient_id = ?
+      ORDER BY prescription_date DESC
+    `;
+    const prescriptions = db.prepare(prescriptionsQuery).all(patient.patient_id) || [];
+
+    // Get patient's treatment timeline
+    const timelineQuery = `
+      SELECT 
+        timeline_id,
+        patient_id,
+        visit_id,
+        event_date,
+        event_type,
+        description,
+        notes
+      FROM treatment_timeline
+      WHERE patient_id = ?
+      ORDER BY event_date DESC
+    `;
+    const timeline = db.prepare(timelineQuery).all(patient.patient_id) || [];
+
+    // Calculate patient's contribution to analytics
+    const doctorForPatient = visits.length > 0 ? db.prepare(`
+      SELECT doctor_id FROM medical_visits WHERE patient_id = ? LIMIT 1
+    `).get(patient.patient_id) : null;
+
+    return {
+      success: true,
+      patient: {
+        patientId: patient.patient_id,
+        smartPatientId: patient.smart_patient_id,
+        firstName: patient.first_name,
+        lastName: patient.last_name,
+        dateOfBirth: patient.date_of_birth,
+        gender: patient.gender,
+        bloodType: patient.blood_type,
+        phoneNumber: patient.phone_number,
+        email: patient.email,
+        registrationDate: patient.registration_date,
+      },
+      medicalTimeline: {
+        totalVisits: visits.length,
+        totalDiagnostics: diagnostics.length,
+        totalPrescriptions: prescriptions.length,
+        visits: visits.slice(0, 10), // Last 10 visits
+        diagnostics: diagnostics.slice(0, 10), // Last 10 diagnostics
+        prescriptions: prescriptions.slice(0, 10), // Last 10 prescriptions
+        timeline: timeline.slice(0, 20), // Last 20 timeline events
+      },
+      analyticsContribution: {
+        visitCount: visits.length,
+        diagnosticCount: diagnostics.length,
+        prescriptionCount: prescriptions.length,
+        registrationDate: patient.registration_date,
+        lastVisitDate: visits.length > 0 ? visits[0].visit_date : null,
+      },
+    };
+  } catch (error) {
+    console.error("Error getting patient analytics:", error);
+    throw error;
+  }
+};
+
 module.exports = {
   getTotalPatientVisits,
   getDepartmentPerformance,
@@ -399,4 +563,6 @@ module.exports = {
   getComprehensiveAnalytics,
   getTopPerformingDoctors,
   getDiagnosticStatistics,
+  searchPatients,
+  getPatientAnalytics,
 };
