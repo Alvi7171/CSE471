@@ -1,4 +1,7 @@
 const { db, query } = require("../config/database");
+const {
+  dispatchAppointmentNotifications,
+} = require("../utils/notificationService");
 
 const DAY_NAMES = [
   "Sunday",
@@ -11,7 +14,7 @@ const DAY_NAMES = [
 ];
 
 const ISO_DATE_REGEX = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/;
-const TIME_REGEX = /^([01][0-9]|2[0-3]):([0-5][0-9]):([0-5][0-9])$/;
+const TIME_REGEX = /^([01][0-9]|2[0-3]):([0-5][0-9])(?::([0-5][0-9]))?$/;
 
 const getDayOfWeekFromDateString = (dateString) => {
   const match = ISO_DATE_REGEX.exec(dateString);
@@ -40,7 +43,40 @@ const timeToMinutes = (timeString) => {
   return Number(match[1]) * 60 + Number(match[2]);
 };
 
+const resolveScheduleWindowMinutes = (startTime, endTime) => {
+  const startMinutes = timeToMinutes(startTime);
+  let endMinutes = timeToMinutes(endTime);
+
+  if (startMinutes === null || endMinutes === null) {
+    return null;
+  }
+
+  // Treat HH:MM -> 00:00 as an end-of-day schedule (e.g., 19:00-00:00).
+  if (endMinutes === 0 && startMinutes > 0) {
+    endMinutes = 24 * 60;
+  }
+
+  if (endMinutes <= startMinutes) {
+    return null;
+  }
+
+  return { startMinutes, endMinutes };
+};
+
 const formatSlotDisplayTime = (timeString) => timeString.slice(0, 5);
+
+const notifyAppointmentEvent = async (appointmentId, eventType) => {
+  try {
+    await dispatchAppointmentNotifications(appointmentId, eventType);
+    return null;
+  } catch (error) {
+    console.error(
+      `Notification dispatch failed for appointment ${appointmentId}:`,
+      error.message,
+    );
+    return "Appointment saved, but one or more notifications could not be processed.";
+  }
+};
 
 exports.getAvailableDoctors = async (req, res) => {
   try {
@@ -159,22 +195,28 @@ exports.getAvailableSlots = async (req, res) => {
     const allSlots = [];
 
     for (const schedule of schedules) {
-      const startMinutes = timeToMinutes(schedule.start_time);
-      const endMinutes = timeToMinutes(schedule.end_time);
       const slotDuration = Number(schedule.slot_duration || 30);
+      const window = resolveScheduleWindowMinutes(
+        schedule.start_time,
+        schedule.end_time,
+      );
 
       if (
-        startMinutes === null ||
-        endMinutes === null ||
+        !window ||
         slotDuration <= 0 ||
-        endMinutes <= startMinutes
+        window.endMinutes <= window.startMinutes
       ) {
         continue;
       }
 
-      for (let t = startMinutes; t < endMinutes; t += slotDuration) {
-        const hour = Math.floor(t / 60);
-        const minute = t % 60;
+      for (
+        let t = window.startMinutes;
+        t < window.endMinutes;
+        t += slotDuration
+      ) {
+        const normalizedMinutes = t % (24 * 60);
+        const hour = Math.floor(normalizedMinutes / 60);
+        const minute = normalizedMinutes % 60;
         const slotTime = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00`;
         const key = `${schedule.schedule_id}|${slotTime}`;
         const booked = bookedMap.has(key);
@@ -290,8 +332,12 @@ exports.bookAppointment = async (req, res) => {
 
     const schedule = scheduleRows[0];
     const appointmentMinutes = timeToMinutes(appointmentTime);
-    const scheduleStart = timeToMinutes(schedule.start_time);
-    const scheduleEnd = timeToMinutes(schedule.end_time);
+    const scheduleWindow = resolveScheduleWindowMinutes(
+      schedule.start_time,
+      schedule.end_time,
+    );
+    const scheduleStart = scheduleWindow?.startMinutes ?? null;
+    const scheduleEnd = scheduleWindow?.endMinutes ?? null;
     const slotDuration = Number(schedule.slot_duration || 30);
 
     if (
@@ -336,6 +382,7 @@ exports.bookAppointment = async (req, res) => {
       INSERT INTO appointments (
         schedule_id,
         doctor_id,
+        patient_user_id,
         patient_name,
         patient_age,
         patient_gender,
@@ -345,11 +392,12 @@ exports.bookAppointment = async (req, res) => {
         appointment_date,
         appointment_time,
         status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
       `,
       [
         scheduleId,
         doctorId,
+        req.user.userId,
         patientName,
         Number(patientAge),
         patientGender || null,
@@ -378,10 +426,16 @@ exports.bookAppointment = async (req, res) => {
       [insertResult.insertId],
     );
 
+    const notificationWarning = await notifyAppointmentEvent(
+      insertResult.insertId,
+      "confirmation",
+    );
+
     return res.status(201).json({
       success: true,
       message: "Appointment booked successfully",
       appointment: appointmentRows[0],
+      notificationWarning,
     });
   } catch (error) {
     await connection.rollback();
@@ -462,7 +516,12 @@ exports.cancelAppointment = async (req, res) => {
     const { appointmentId } = req.params;
 
     const rows = await query(
-      "SELECT appointment_id, status FROM appointments WHERE appointment_id = ? LIMIT 1",
+      `
+      SELECT appointment_id, doctor_id, patient_user_id, status
+      FROM appointments
+      WHERE appointment_id = ?
+      LIMIT 1
+      `,
       [appointmentId],
     );
 
@@ -480,14 +539,40 @@ exports.cancelAppointment = async (req, res) => {
       });
     }
 
+    if (
+      req.user?.role === "patient" &&
+      Number(rows[0].patient_user_id) !== Number(req.user.userId)
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "You can cancel only your own appointments",
+      });
+    }
+
+    if (
+      req.user?.role === "doctor" &&
+      Number(rows[0].doctor_id) !== Number(req.user.doctorId)
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "You can cancel only your own appointments",
+      });
+    }
+
     await query(
       "UPDATE appointments SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE appointment_id = ?",
       [appointmentId],
     );
 
+    const notificationWarning = await notifyAppointmentEvent(
+      appointmentId,
+      "cancellation",
+    );
+
     return res.json({
       success: true,
       message: "Appointment cancelled successfully",
+      notificationWarning,
     });
   } catch (error) {
     return res.status(500).json({
@@ -539,12 +624,18 @@ exports.updateAppointmentStatus = async (req, res) => {
       [status, appointmentId],
     );
 
+    const notificationWarning = await notifyAppointmentEvent(
+      appointmentId,
+      status === "declined" ? "cancellation" : "update",
+    );
+
     return res.json({
       success: true,
       message:
         status === "confirmed"
           ? "Appointment approved successfully"
           : "Appointment declined successfully",
+      notificationWarning,
     });
   } catch (error) {
     return res.status(500).json({

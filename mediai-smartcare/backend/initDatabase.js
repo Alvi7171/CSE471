@@ -101,6 +101,20 @@ const run = async () => {
       connection,
       "ALTER TABLE appointments MODIFY status ENUM('pending', 'confirmed', 'declined', 'cancelled', 'completed') DEFAULT 'pending'",
     );
+    if (!(await hasColumn(connection, "appointments", "patient_user_id"))) {
+      await safeExec(
+        connection,
+        "ALTER TABLE appointments ADD COLUMN patient_user_id INT NULL",
+      );
+      await safeExec(
+        connection,
+        "ALTER TABLE appointments ADD CONSTRAINT fk_appointments_patient_user FOREIGN KEY (patient_user_id) REFERENCES users (user_id) ON DELETE SET NULL",
+      );
+      await safeExec(
+        connection,
+        "CREATE INDEX idx_appointment_patient_user ON appointments (patient_user_id)",
+      );
+    }
 
     console.log("Schema migration complete");
 

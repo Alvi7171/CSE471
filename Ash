@@ -1,1 +1,36 @@
 Hi I am Ash
+Core booking flow
+
+backend/controllers/appointmentController.js
+backend/routes/appointments.js
+backend/server.js
+frontend/src/components/PatientBooking.jsx
+frontend/src/services/api.js
+frontend/src/App.jsx
+Doctor-side appointment management (same booking system)
+
+frontend/src/components/DoctorSchedule.jsx
+Database/schema files used by booking
+
+backend/models/schema.sql
+backend/initDatabase.js
+backend/config/database.js
+Booking documentation
+
+PATIENT_BOOKING_IMPLEMENTATION.md
+_____________________________________________________________________________________________
+frontend/src/components/DoctorSchedule.jsx
+Doctor sees structured appointment list and can change status (approve/cancel/etc.).
+
+frontend/src/services/api.js
+Frontend API methods for fetching doctor appointments and updating status.
+
+backend/routes/appointments.js
+Routes for doctor appointment list, cancel, and status updates.
+
+backend/controllers/appointmentController.js
+Core backend logic for viewing, approving, cancelling, and status transitions.
+
+frontend/src/App.jsx
+Role-based tab/navigation wiring to appointment management screens.
+

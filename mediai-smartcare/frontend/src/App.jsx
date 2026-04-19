@@ -5,6 +5,7 @@ import PatientBooking from "./components/PatientBooking";
 import { authAPI } from "./services/api";
 import PatientRegistration from "./components/PatientRegistration";
 import AnalyticsReports from "./components/AnalyticsReports";
+import NotificationCenter from "./components/NotificationCenter";
 import "./index.css";
 
 const DEPARTMENTS = [
@@ -483,7 +484,7 @@ function App() {
         </aside>
 
         <section className="p-4 md:p-8">
-          <header className="bg-white/85 backdrop-blur-md border border-white/70 rounded-2xl px-6 py-4 shadow-sm flex items-center justify-between mb-4">
+          <header className="relative z-30 bg-white/85 backdrop-blur-md border border-white/70 rounded-2xl px-6 py-4 shadow-sm flex items-center justify-between mb-4">
             <div>
               <p className="text-sm uppercase tracking-widest text-gray-500">
                 {user.role}
@@ -492,12 +493,15 @@ function App() {
                 {user.fullName}
               </h2>
             </div>
-            <button
-              onClick={handleLogout}
-              className="px-4 py-2 rounded-lg border border-theme-primary text-theme-primary hover:bg-theme-primary hover:text-white transition-colors"
-            >
-              Logout
-            </button>
+            <div className="flex items-center gap-3">
+              <NotificationCenter />
+              <button
+                onClick={handleLogout}
+                className="px-4 py-2 rounded-lg border border-theme-primary text-theme-primary hover:bg-theme-primary hover:text-white transition-colors"
+              >
+                Logout
+              </button>
+            </div>
           </header>
 
           {user.role === "patient" && (

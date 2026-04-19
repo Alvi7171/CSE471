@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS appointments (
   appointment_id INT AUTO_INCREMENT PRIMARY KEY,
   schedule_id INT NOT NULL,
   doctor_id INT NOT NULL,
+  patient_user_id INT NULL,
   patient_name VARCHAR(120) NOT NULL,
   patient_age INT NOT NULL,
   patient_gender ENUM('Male', 'Female', 'Other'),
@@ -81,6 +82,47 @@ CREATE TABLE IF NOT EXISTS appointments (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT fk_appointments_schedule FOREIGN KEY (schedule_id) REFERENCES doctor_schedules (schedule_id) ON DELETE CASCADE,
   CONSTRAINT fk_appointments_doctor FOREIGN KEY (doctor_id) REFERENCES doctors (doctor_id) ON DELETE CASCADE,
+  CONSTRAINT fk_appointments_patient_user FOREIGN KEY (patient_user_id) REFERENCES users (user_id) ON DELETE SET NULL,
   INDEX idx_appointment_doctor_date (doctor_id, appointment_date),
+  INDEX idx_appointment_patient_user (patient_user_id),
   UNIQUE KEY unique_schedule_slot (schedule_id, appointment_date, appointment_time)
+);
+
+CREATE TABLE IF NOT EXISTS notification_preferences (
+  preference_id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  email_enabled TINYINT(1) DEFAULT 1,
+  portal_enabled TINYINT(1) DEFAULT 1,
+  reminder_enabled TINYINT(1) DEFAULT 1,
+  reminder_hours_before INT DEFAULT 24,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_notification_preferences_user FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE CASCADE,
+  UNIQUE KEY unique_notification_preference_user (user_id)
+);
+
+CREATE TABLE IF NOT EXISTS notifications (
+  notification_id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NULL,
+  appointment_id INT NOT NULL,
+  recipient_role ENUM('patient', 'doctor', 'admin') NOT NULL,
+  channel ENUM('portal', 'email') NOT NULL,
+  event_type ENUM('confirmation', 'reminder', 'cancellation', 'update') NOT NULL,
+  title VARCHAR(180) NOT NULL,
+  message TEXT NOT NULL,
+  email_address VARCHAR(180) NULL,
+  status ENUM('pending', 'sent', 'failed', 'read', 'skipped') DEFAULT 'pending',
+  scheduled_for DATETIME NULL,
+  sent_at DATETIME NULL,
+  read_at DATETIME NULL,
+  metadata JSON NULL,
+  dedupe_key VARCHAR(255) NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_notifications_user FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE CASCADE,
+  CONSTRAINT fk_notifications_appointment FOREIGN KEY (appointment_id) REFERENCES appointments (appointment_id) ON DELETE CASCADE,
+  UNIQUE KEY unique_notification_dedupe_key (dedupe_key),
+  INDEX idx_notifications_user_channel_status (user_id, channel, status),
+  INDEX idx_notifications_scheduled (status, scheduled_for),
+  INDEX idx_notifications_appointment (appointment_id)
 );

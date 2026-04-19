@@ -152,4 +152,38 @@ export const symptomAPI = {
   },
 };
 
+export const notificationAPI = {
+  list: async (limit = 20) => {
+    const response = await api.get("/notifications", {
+      params: { limit },
+    });
+    return response.data;
+  },
+
+  getUnreadCount: async () => {
+    const response = await api.get("/notifications/unread-count");
+    return response.data;
+  },
+
+  markAsRead: async (notificationId) => {
+    const response = await api.put(`/notifications/${notificationId}/read`);
+    return response.data;
+  },
+
+  markAllAsRead: async () => {
+    const response = await api.put("/notifications/read-all");
+    return response.data;
+  },
+
+  getPreferences: async () => {
+    const response = await api.get("/notifications/preferences");
+    return response.data;
+  },
+
+  updatePreferences: async (payload) => {
+    const response = await api.put("/notifications/preferences", payload);
+    return response.data;
+  },
+};
+
 export default api;
