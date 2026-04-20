@@ -5,25 +5,40 @@ const path = require("path");
 const bcrypt = require("bcryptjs");
 const { db } = require("./config/database");
 
-const hasColumn = async (connection, tableName, columnName) => {
-  const [rows] = await connection.execute(
-    `
-    SELECT COLUMN_NAME
-    FROM INFORMATION_SCHEMA.COLUMNS
-    WHERE TABLE_SCHEMA = DATABASE()
-      AND TABLE_NAME = ?
-      AND COLUMN_NAME = ?
-    LIMIT 1
-    `,
-    [tableName, columnName],
-  );
-
-  return rows.length > 0;
+const normalizeSqlForSqlite = (sql) =>
+  String(sql || "")
+    .replace(/\bFOR\s+UPDATE\b/gi, "")
+    .replace(
+      /DATE_SUB\s*\(\s*NOW\(\)\s*,\s*INTERVAL\s+(\d+)\s+DAY\s*\)/gi,
+      (_, days) => `datetime('now', '-${days} days')`,
+    )
+    .replace(/\bNOW\(\)/gi, "CURRENT_TIMESTAMP");
+  if (process.env.USE_SQLITE === 'true') {
+    const rows = connection.prepare(`PRAGMA table_info(${tableName})`).all();
+    return rows.some(row => row.name === columnName);
+  } else {
+    const [rows] = await connection.execute(
+      `
+      SELECT COLUMN_NAME
+      FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = ?
+        AND COLUMN_NAME = ?
+      LIMIT 1
+      `,
+      [tableName, columnName],
+    );
+    return rows.length > 0;
+  }
 };
 
 const safeExec = async (connection, sql) => {
   try {
-    await connection.query(sql);
+    if (process.env.USE_SQLITE === 'true') {
+      connection.exec(sql);
+    } else {
+      await connection.query(sql);
+    }
   } catch (error) {
     const ignoredPatterns = [
       "Duplicate column name",
@@ -42,13 +57,17 @@ const safeExec = async (connection, sql) => {
 };
 
 const run = async () => {
-  const connection = await db.getConnection();
+  const connection = process.env.USE_SQLITE === 'true' ? db : await db.getConnection();
 
   try {
-    console.log("Initializing MySQL schema...");
+    console.log("Initializing schema...");
 
     const schemaPath = path.join(__dirname, "models", "schema.sql");
-    const schemaSQL = fs.readFileSync(schemaPath, "utf8");
+    let schemaSQL = fs.readFileSync(schemaPath, "utf8");
+
+    if (process.env.USE_SQLITE === 'true') {
+      schemaSQL = normalizeSqlForSqlite(schemaSQL);
+    }
 
     const statements = schemaSQL
       .split(";")
@@ -56,14 +75,20 @@ const run = async () => {
       .filter((stmt) => stmt.length > 0);
 
     for (const statement of statements) {
-      await connection.query(statement);
+      if (process.env.USE_SQLITE === 'true') {
+        connection.exec(statement);
+      } else {
+        await connection.query(statement);
+      }
     }
 
     // Railway-safe incremental migration for already-created tables.
-    await safeExec(
-      connection,
-      "ALTER TABLE users MODIFY email VARCHAR(120) NULL",
-    );
+    if (process.env.USE_SQLITE !== 'true') {
+      await safeExec(
+        connection,
+        "ALTER TABLE users MODIFY email VARCHAR(120) NULL",
+      );
+    }
     if (!(await hasColumn(connection, "users", "address"))) {
       await safeExec(
         connection,
@@ -80,10 +105,12 @@ const run = async () => {
       );
     }
 
-    await safeExec(
-      connection,
-      "ALTER TABLE doctors MODIFY email VARCHAR(100) NULL",
-    );
+    if (process.env.USE_SQLITE !== 'true') {
+      await safeExec(
+        connection,
+        "ALTER TABLE doctors MODIFY email VARCHAR(100) NULL",
+      );
+    }
     if (!(await hasColumn(connection, "doctors", "degree"))) {
       await safeExec(
         connection,
@@ -97,10 +124,12 @@ const run = async () => {
       );
     }
 
-    await safeExec(
-      connection,
-      "ALTER TABLE appointments MODIFY status ENUM('pending', 'confirmed', 'declined', 'cancelled', 'completed') DEFAULT 'pending'",
-    );
+    if (process.env.USE_SQLITE !== 'true') {
+      await safeExec(
+        connection,
+        "ALTER TABLE appointments MODIFY status ENUM('pending', 'confirmed', 'declined', 'cancelled', 'completed') DEFAULT 'pending'",
+      );
+    }
     if (!(await hasColumn(connection, "appointments", "patient_user_id"))) {
       await safeExec(
         connection,

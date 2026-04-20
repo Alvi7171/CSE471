@@ -36,11 +36,11 @@ let testConnection;
 let engine;
 
 if (useSqliteFallback) {
-  const { DatabaseSync } = require("node:sqlite");
+  const DatabaseSync = require("better-sqlite3");
 
   const sqlitePath = path.join(__dirname, "..", "mediai_smartcare.db");
   const sqliteDb = new DatabaseSync(sqlitePath);
-  sqliteDb.exec("PRAGMA foreign_keys = ON;");
+  sqliteDb.pragma("foreign_keys = ON");
 
   const ensureSqliteColumn = (tableName, columnName, definition) => {
     const columns = sqliteDb.prepare(`PRAGMA table_info(${tableName})`).all();
