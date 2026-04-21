@@ -17,11 +17,16 @@ const isSelectLikeSql = (sql) => /^\s*(SELECT|PRAGMA|WITH)\b/i.test(sql);
 
 const formatDbError = (error) =>
   String(
-    error?.message || error?.sqlMessage || error?.code || "Unknown database error",
+    error?.message ||
+      error?.sqlMessage ||
+      error?.code ||
+      "Unknown database error",
   );
 
 const connectionUrl =
-  process.env.DATABASE_URL || process.env.MYSQL_PUBLIC_URL || process.env.MYSQL_URL;
+  process.env.DATABASE_URL ||
+  process.env.MYSQL_PUBLIC_URL ||
+  process.env.MYSQL_URL;
 const hasExplicitMysqlConfig =
   Boolean(connectionUrl) ||
   Boolean(process.env.DB_HOST) ||
@@ -70,10 +75,26 @@ if (useSqliteFallback) {
 
     ensureSqliteColumn("doctors", "degree", "degree TEXT");
     ensureSqliteColumn("doctors", "medical_name", "medical_name TEXT");
-    ensureSqliteColumn("doctor_schedules", "schedule_date", "schedule_date TEXT");
-    ensureSqliteColumn("doctor_schedules", "max_patients", "max_patients INTEGER DEFAULT 10");
-    ensureSqliteColumn("appointments", "patient_user_id", "patient_user_id INTEGER");
-    ensureSqliteColumn("appointments", "updated_at", "updated_at TEXT DEFAULT CURRENT_TIMESTAMP");
+    ensureSqliteColumn(
+      "doctor_schedules",
+      "schedule_date",
+      "schedule_date TEXT",
+    );
+    ensureSqliteColumn(
+      "doctor_schedules",
+      "max_patients",
+      "max_patients INTEGER DEFAULT 10",
+    );
+    ensureSqliteColumn(
+      "appointments",
+      "patient_user_id",
+      "patient_user_id INTEGER",
+    );
+    ensureSqliteColumn(
+      "appointments",
+      "updated_at",
+      "updated_at TEXT DEFAULT CURRENT_TIMESTAMP",
+    );
 
     sqliteDb.exec(`
       CREATE TABLE IF NOT EXISTS notification_preferences (

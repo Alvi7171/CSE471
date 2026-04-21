@@ -14,26 +14,30 @@ const { db } = require("../config/database");
  */
 const getTotalPatientVisits = (startDate, endDate) => {
   try {
-    let query = "SELECT COUNT(*) as total_visits FROM medical_visits WHERE status = 'completed'";
+    let query =
+      "SELECT COUNT(*) as total_visits FROM appointments WHERE status = 'completed'";
     const params = [];
 
     if (startDate && endDate) {
-      query += " AND DATE(visit_date) >= ? AND DATE(visit_date) <= ?";
+      query +=
+        " AND DATE(appointment_date) >= ? AND DATE(appointment_date) <= ?";
       params.push(startDate, endDate);
     }
 
     const result = db.prepare(query).get(...params);
-    
+
     // Get visits by day for trend analysis
-    let trendQuery = "SELECT DATE(visit_date) as visit_day, COUNT(*) as visits FROM medical_visits WHERE status = 'completed'";
+    let trendQuery =
+      "SELECT DATE(appointment_date) as visit_day, COUNT(*) as visits FROM appointments WHERE status = 'completed'";
     const trendParams = [];
-    
+
     if (startDate && endDate) {
-      trendQuery += " AND DATE(visit_date) >= ? AND DATE(visit_date) <= ?";
+      trendQuery +=
+        " AND DATE(appointment_date) >= ? AND DATE(appointment_date) <= ?";
       trendParams.push(startDate, endDate);
     }
-    
-    trendQuery += " GROUP BY DATE(visit_date) ORDER BY visit_day";
+
+    trendQuery += " GROUP BY DATE(appointment_date) ORDER BY visit_day";
     const trendData = db.prepare(trendQuery).all(...trendParams);
 
     return {
@@ -56,23 +60,24 @@ const getDepartmentPerformance = (startDate, endDate) => {
       SELECT 
         d.department,
         COUNT(DISTINCT d.doctor_id) as total_doctors,
-        COUNT(DISTINCT mv.visit_id) as total_visits,
+        COUNT(DISTINCT a.appointment_id) as total_visits,
         ROUND(AVG(d.consultation_fee), 2) as avg_consultation_fee,
         ROUND(SUM(d.consultation_fee), 2) as department_revenue,
         COUNT(CASE WHEN d.is_available = 1 THEN 1 END) as available_doctors
       FROM doctors d
-      LEFT JOIN medical_visits mv ON d.doctor_id = mv.doctor_id AND mv.status = 'completed'
+      LEFT JOIN appointments a ON d.doctor_id = a.doctor_id AND a.status = 'completed'
     `;
-    
+
     const params = [];
-    
+
     if (startDate && endDate) {
-      query += " AND DATE(mv.visit_date) >= ? AND DATE(mv.visit_date) <= ?";
+      query +=
+        " AND DATE(a.appointment_date) >= ? AND DATE(a.appointment_date) <= ?";
       params.push(startDate, endDate);
     }
 
     query += " GROUP BY d.department ORDER BY total_visits DESC";
-    
+
     const result = db.prepare(query).all(...params);
     return result || [];
   } catch (error) {
@@ -93,25 +98,26 @@ const getDoctorWorkload = (startDate, endDate) => {
         d.name,
         d.department,
         d.specialization,
-        COUNT(DISTINCT mv.visit_id) as total_visits,
-        COUNT(DISTINCT mv.patient_id) as unique_patients,
+        COUNT(DISTINCT a.appointment_id) as total_visits,
+        COUNT(DISTINCT a.patient_user_id) as unique_patients,
         ROUND(AVG(d.consultation_fee), 2) as avg_fee,
-        ROUND(d.consultation_fee * COUNT(DISTINCT mv.visit_id), 2) as doctor_revenue,
+        ROUND(d.consultation_fee * COUNT(DISTINCT a.appointment_id), 2) as doctor_revenue,
         d.is_available,
         d.experience_years
       FROM doctors d
-      LEFT JOIN medical_visits mv ON d.doctor_id = mv.doctor_id AND mv.status = 'completed'
+      LEFT JOIN appointments a ON d.doctor_id = a.doctor_id AND a.status = 'completed'
     `;
-    
+
     const params = [];
-    
+
     if (startDate && endDate) {
-      query += " AND DATE(mv.visit_date) >= ? AND DATE(mv.visit_date) <= ?";
+      query +=
+        " AND DATE(a.appointment_date) >= ? AND DATE(a.appointment_date) <= ?";
       params.push(startDate, endDate);
     }
 
     query += " GROUP BY d.doctor_id, d.name ORDER BY total_visits DESC";
-    
+
     const result = db.prepare(query).all(...params);
     return result || [];
   } catch (error) {
@@ -130,16 +136,17 @@ const getRevenueStatistics = (startDate, endDate) => {
     let totalQuery = `
       SELECT 
         ROUND(SUM(d.consultation_fee), 2) as total_revenue,
-        COUNT(DISTINCT mv.visit_id) as paid_visits
-      FROM medical_visits mv
-      JOIN doctors d ON mv.doctor_id = d.doctor_id
-      WHERE mv.status = 'completed'
+        COUNT(DISTINCT a.appointment_id) as paid_visits
+      FROM appointments a
+      JOIN doctors d ON a.doctor_id = d.doctor_id
+      WHERE a.status = 'completed'
     `;
-    
+
     const totalParams = [];
-    
+
     if (startDate && endDate) {
-      totalQuery += " AND DATE(mv.visit_date) >= ? AND DATE(mv.visit_date) <= ?";
+      totalQuery +=
+        " AND DATE(a.appointment_date) >= ? AND DATE(a.appointment_date) <= ?";
       totalParams.push(startDate, endDate);
     }
 
@@ -150,43 +157,45 @@ const getRevenueStatistics = (startDate, endDate) => {
       SELECT 
         d.department,
         ROUND(SUM(d.consultation_fee), 2) as department_revenue,
-        COUNT(DISTINCT mv.visit_id) as visit_count
-      FROM medical_visits mv
-      JOIN doctors d ON mv.doctor_id = d.doctor_id
-      WHERE mv.status = 'completed'
+        COUNT(DISTINCT a.appointment_id) as visit_count
+      FROM appointments a
+      JOIN doctors d ON a.doctor_id = d.doctor_id
+      WHERE a.status = 'completed'
     `;
-    
+
     const deptParams = [];
-    
+
     if (startDate && endDate) {
-      deptQuery += " AND DATE(mv.visit_date) >= ? AND DATE(mv.visit_date) <= ?";
+      deptQuery +=
+        " AND DATE(a.appointment_date) >= ? AND DATE(a.appointment_date) <= ?";
       deptParams.push(startDate, endDate);
     }
 
     deptQuery += " GROUP BY d.department ORDER BY department_revenue DESC";
-    
+
     const departmentRevenue = db.prepare(deptQuery).all(...deptParams);
 
     // Revenue trend (daily)
     let trendQuery = `
       SELECT 
-        DATE(mv.visit_date) as revenue_date,
+        DATE(a.appointment_date) as revenue_date,
         ROUND(SUM(d.consultation_fee), 2) as daily_revenue,
-        COUNT(DISTINCT mv.visit_id) as visits
-      FROM medical_visits mv
-      JOIN doctors d ON mv.doctor_id = d.doctor_id
-      WHERE mv.status = 'completed'
+        COUNT(DISTINCT a.appointment_id) as visits
+      FROM appointments a
+      JOIN doctors d ON a.doctor_id = d.doctor_id
+      WHERE a.status = 'completed'
     `;
-    
+
     const trendParams = [];
-    
+
     if (startDate && endDate) {
-      trendQuery += " AND DATE(mv.visit_date) >= ? AND DATE(mv.visit_date) <= ?";
+      trendQuery +=
+        " AND DATE(a.appointment_date) >= ? AND DATE(a.appointment_date) <= ?";
       trendParams.push(startDate, endDate);
     }
 
-    trendQuery += " GROUP BY DATE(mv.visit_date) ORDER BY revenue_date";
-    
+    trendQuery += " GROUP BY DATE(a.appointment_date) ORDER BY revenue_date";
+
     const revenueTrend = db.prepare(trendQuery).all(...trendParams);
 
     return {
@@ -208,48 +217,59 @@ const getRevenueStatistics = (startDate, endDate) => {
 const getPatientStatistics = (startDate, endDate) => {
   try {
     // Total patients
-    const totalPatientsQuery = "SELECT COUNT(*) as total_patients FROM patients";
+    const totalPatientsQuery =
+      "SELECT COUNT(*) as total_patients FROM users WHERE role = 'patient'";
     const totalPatients = db.prepare(totalPatientsQuery).get();
 
     // New patients in date range
-    let newPatientsQuery = "SELECT COUNT(*) as new_patients FROM patients WHERE registration_date >= ? AND registration_date <= ?";
-    const newDateStart = startDate ? `${startDate} 00:00:00` : null;
-    const newDateEnd = endDate ? `${endDate} 23:59:59` : null;
-    
-    const newPatients = newDateStart && newDateEnd 
-      ? db.prepare(newPatientsQuery).get(newDateStart, newDateEnd)
-      : { new_patients: 0 };
+    let newPatientsQuery =
+      "SELECT COUNT(*) as new_patients FROM users WHERE role = 'patient'";
+    const newParams = [];
 
-    // Patients with visits
-    const patientsWithVisitsQuery = "SELECT COUNT(DISTINCT patient_id) as patients_with_visits FROM medical_visits WHERE status = 'completed'";
-    const patientsWithVisits = db.prepare(patientsWithVisitsQuery).get();
+    if (startDate && endDate) {
+      newPatientsQuery +=
+        " AND DATE(created_at) >= ? AND DATE(created_at) <= ?";
+      newParams.push(startDate, endDate);
+    }
 
-    // Average visits per patient
-    const avgVisitsQuery = "SELECT COUNT(*) as total_visits, COUNT(DISTINCT patient_id) as total_patients, ROUND(COUNT(*) / COUNT(DISTINCT patient_id), 2) as avg_visits_per_patient FROM medical_visits WHERE status = 'completed'";
-    const avgVisits = db.prepare(avgVisitsQuery).get();
+    const newPatients = db.prepare(newPatientsQuery).get(...newParams);
+
+    // Patients with appointments
+    const patientsWithAppointmentsQuery =
+      "SELECT COUNT(DISTINCT patient_user_id) as patients_with_appointments FROM appointments WHERE status = 'completed'";
+    const patientsWithAppointments = db
+      .prepare(patientsWithAppointmentsQuery)
+      .get();
+
+    // Average appointments per patient
+    const avgAppointmentsQuery =
+      "SELECT COUNT(*) as total_appointments, COUNT(DISTINCT patient_user_id) as total_patients, ROUND(COUNT(*) / NULLIF(COUNT(DISTINCT patient_user_id), 0), 2) as avg_appointments_per_patient FROM appointments WHERE status = 'completed'";
+    const avgAppointments = db.prepare(avgAppointmentsQuery).get();
 
     // Gender distribution
     let genderQuery = `
       SELECT 
         gender,
         COUNT(*) as count
-      FROM patients
+      FROM users WHERE role = 'patient'
     `;
-    
+
     if (startDate && endDate) {
-      genderQuery += ` WHERE DATE(registration_date) >= ? AND DATE(registration_date) <= ?`;
+      genderQuery += ` AND DATE(created_at) >= ? AND DATE(created_at) <= ?`;
     }
-    
+
     genderQuery += " GROUP BY gender";
-    
+
     const genderParams = startDate && endDate ? [startDate, endDate] : [];
     const genderDistribution = db.prepare(genderQuery).all(...genderParams);
 
     return {
       totalPatients: totalPatients?.total_patients || 0,
       newPatients: newPatients?.new_patients || 0,
-      patientsWithVisits: patientsWithVisits?.patients_with_visits || 0,
-      avgVisitsPerPatient: avgVisits?.avg_visits_per_patient || 0,
+      patientsWithAppointments:
+        patientsWithAppointments?.patients_with_appointments || 0,
+      avgAppointmentsPerPatient:
+        avgAppointments?.avg_appointments_per_patient || 0,
       genderDistribution: genderDistribution || [],
     };
   } catch (error) {
@@ -280,7 +300,7 @@ const getComprehensiveAnalytics = (startDate, endDate) => {
         totalVisits: visits.totalVisits,
         totalPatients: patients.totalPatients,
         totalRevenue: revenue.totalRevenue,
-        activeDoctors: doctors.filter(d => d.is_available).length,
+        activeDoctors: doctors.filter((d) => d.is_available).length,
         activeDepartments: departments.length,
       },
       visits,
@@ -313,9 +333,9 @@ const getTopPerformingDoctors = (limit = 5, startDate, endDate) => {
       FROM doctors d
       LEFT JOIN medical_visits mv ON d.doctor_id = mv.doctor_id AND mv.status = 'completed'
     `;
-    
+
     const params = [];
-    
+
     if (startDate && endDate) {
       query += " AND DATE(mv.visit_date) >= ? AND DATE(mv.visit_date) <= ?";
       params.push(startDate, endDate);
@@ -323,7 +343,7 @@ const getTopPerformingDoctors = (limit = 5, startDate, endDate) => {
 
     query += ` GROUP BY d.doctor_id ORDER BY total_visits DESC LIMIT ?`;
     params.push(limit);
-    
+
     const result = db.prepare(query).all(...params);
     return result || [];
   } catch (error) {
@@ -347,16 +367,16 @@ const getDiagnosticStatistics = (startDate, endDate) => {
       FROM diagnostic_reports
       WHERE report_date IS NOT NULL
     `;
-    
+
     const typeParams = [];
-    
+
     if (startDate && endDate) {
       typeQuery += " AND DATE(report_date) >= ? AND DATE(report_date) <= ?";
       typeParams.push(startDate, endDate);
     }
 
     typeQuery += " GROUP BY report_type ORDER BY count DESC";
-    
+
     const reportsByType = db.prepare(typeQuery).all(...typeParams);
 
     // Urgency distribution
@@ -367,16 +387,16 @@ const getDiagnosticStatistics = (startDate, endDate) => {
       FROM diagnostic_reports
       WHERE report_date IS NOT NULL
     `;
-    
+
     const urgencyParams = [];
-    
+
     if (startDate && endDate) {
       urgencyQuery += " AND DATE(report_date) >= ? AND DATE(report_date) <= ?";
       urgencyParams.push(startDate, endDate);
     }
 
     urgencyQuery += " GROUP BY urgency_level";
-    
+
     const urgencyDistribution = db.prepare(urgencyQuery).all(...urgencyParams);
 
     return {
@@ -422,7 +442,7 @@ const searchPatients = (searchQuery) => {
 
     const searchTerm = `%${searchQuery}%`;
     const results = db.prepare(query).all(searchTerm, searchTerm, searchTerm);
-    
+
     return results || [];
   } catch (error) {
     console.error("Error searching patients:", error);
@@ -477,7 +497,8 @@ const getPatientAnalytics = (patientId) => {
       WHERE patient_id = ?
       ORDER BY report_date DESC
     `;
-    const diagnostics = db.prepare(diagnosticsQuery).all(patient.patient_id) || [];
+    const diagnostics =
+      db.prepare(diagnosticsQuery).all(patient.patient_id) || [];
 
     // Get patient's prescriptions
     const prescriptionsQuery = `
@@ -494,7 +515,8 @@ const getPatientAnalytics = (patientId) => {
       WHERE patient_id = ?
       ORDER BY prescription_date DESC
     `;
-    const prescriptions = db.prepare(prescriptionsQuery).all(patient.patient_id) || [];
+    const prescriptions =
+      db.prepare(prescriptionsQuery).all(patient.patient_id) || [];
 
     // Get patient's treatment timeline
     const timelineQuery = `
@@ -513,9 +535,16 @@ const getPatientAnalytics = (patientId) => {
     const timeline = db.prepare(timelineQuery).all(patient.patient_id) || [];
 
     // Calculate patient's contribution to analytics
-    const doctorForPatient = visits.length > 0 ? db.prepare(`
+    const doctorForPatient =
+      visits.length > 0
+        ? db
+            .prepare(
+              `
       SELECT doctor_id FROM medical_visits WHERE patient_id = ? LIMIT 1
-    `).get(patient.patient_id) : null;
+    `,
+            )
+            .get(patient.patient_id)
+        : null;
 
     return {
       success: true,
