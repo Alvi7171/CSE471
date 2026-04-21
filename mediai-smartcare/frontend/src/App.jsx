@@ -7,6 +7,8 @@ import { authAPI } from "./services/api";
 import PatientRegistration from "./components/PatientRegistration";
 import AnalyticsReports from "./components/AnalyticsReports";
 import NotificationCenter from "./components/NotificationCenter";
+import LabTestManagement from "./components/LabTestManagement";
+import EmergencyResponse from "./components/EmergencyResponse";
 import "./index.css";
 
 const DEPARTMENTS = [

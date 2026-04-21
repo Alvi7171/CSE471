@@ -8,9 +8,9 @@ const router = express.Router();
 const patientController = require("../controllers/patientController");
 
 // Dev_Ornov Routes
-router.get("/", patientController.getAllPatients);
-router.get("/phone/:phone/timeline", patientController.getPatientTimelineByPhone);
-router.get("/phone/:phone/summary", patientController.getPatientSummary);
+//router.get("/", patientController.getAllPatients);
+//router.get("/phone/:phone/timeline", patientController.getPatientTimelineByPhone);
+router.get("/:phone/summary", patientController.getPatientSummary);
 
 // ============================================
 // PATIENT REGISTRATION ROUTES
@@ -29,6 +29,14 @@ router.get("/phone/:phone/summary", patientController.getPatientSummary);
  * @access  Public
  */
 router.post("/register", patientController.registerPatient);
+
+/**
+ * @route   GET /api/patients/:phone/summary
+ * @desc    Get AI-generated patient history summary by phone
+ * @params  phone (patient phone number)
+ * @access  Public
+ */
+router.get("/:phone/summary", patientController.getPatientSummary);
 
 /**
  * @route   GET /api/patients/:patientId

@@ -11,6 +11,7 @@ const adminRoutes = require("./routes/admin");
 const patientRoutes = require("./routes/patients");
 const analyticsRoutes = require("./routes/analytics");
 const notificationRoutes = require("./routes/notifications");
+const labEmergencyRoutes = require("./routes/labEmergency");
 const {
   startNotificationScheduler,
 } = require("./utils/notificationService");
@@ -91,6 +92,8 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/patients", patientRoutes);
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/lab", labEmergencyRoutes);
+app.use("/api/emergency", labEmergencyRoutes);
 
 // ============================================
 // Error Handling Middleware
