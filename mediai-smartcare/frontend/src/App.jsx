@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import SymptomChecker from "./components/SymptomChecker";
 import DoctorSchedule from "./components/DoctorSchedule";
 import PatientBooking from "./components/PatientBooking";
+import PatientTimeline from "./components/PatientTimeline";
 import { authAPI } from "./services/api";
 import PatientRegistration from "./components/PatientRegistration";
 import AnalyticsReports from "./components/AnalyticsReports";
@@ -30,6 +31,7 @@ const roleTabs = {
   patient: [
     { key: "symptom", label: "AI Symptom Checker" },
     { key: "booking", label: "Book Appointment" },
+    { key: "timeline", label: "Patient Records" },
   ],
   doctor: [{ key: "schedule", label: "Doctor Schedule" }],
   admin: [
@@ -519,20 +521,24 @@ function App() {
               </div>
             </div>
           )}
-          {activeTab === "symptom" && user.role === "patient" && (
-            <SymptomChecker />
-          )}
-          {activeTab === "booking" && user.role === "patient" && (
-            <PatientBooking />
-          )}
-          {activeTab === "schedule" &&
-            (user.role === "doctor" || user.role === "admin") && (
-              <DoctorSchedule currentUser={user} />
+          <main className="py-6">
+            {activeTab === "symptom" && user.role === "patient" && (
+              <SymptomChecker />
             )}
-
-          {activeTab === "registration" && user.role === "admin" && (
-            <PatientRegistration />
-          )}
+            {activeTab === "booking" && user.role === "patient" && (
+              <PatientBooking />
+            )}
+            {activeTab === "timeline" && user.role === "patient" && (
+              <PatientTimeline />
+            )}
+            {activeTab === "schedule" &&
+              (user.role === "doctor" || user.role === "admin") && (
+                <DoctorSchedule currentUser={user} />
+              )}
+            {activeTab === "registration" && user.role === "admin" && (
+              <PatientRegistration />
+            )}
+          </main>
 
           {activeTab === "analytics" && user.role === "admin" && (
             <AnalyticsReports />

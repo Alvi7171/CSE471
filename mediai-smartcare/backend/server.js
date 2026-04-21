@@ -174,6 +174,9 @@ const startServer = async () => {
       console.log(
         `   - GET  http://localhost:${PORT}/api/symptoms/stats/overview`,
       );
+      console.log("\n👥 Patient Management APIs:");
+      console.log(`   - GET  http://localhost:${PORT}/api/patients`);
+      console.log(`   - GET  http://localhost:${PORT}/api/patients/:phone/timeline`);
       console.log("========================================\n");
       console.log("✅ Server is ready to accept requests!\n");
     });

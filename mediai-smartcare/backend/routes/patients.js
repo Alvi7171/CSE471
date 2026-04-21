@@ -3,10 +3,14 @@
  * REST API endpoints for patient registration, medical history, and access control
  * Author: MD Shafiur Rahman Alvi (ID: 23201355)
  */
-
 const express = require("express");
 const router = express.Router();
 const patientController = require("../controllers/patientController");
+
+// Dev_Ornov Routes
+router.get("/", patientController.getAllPatients);
+router.get("/phone/:phone/timeline", patientController.getPatientTimelineByPhone);
+router.get("/phone/:phone/summary", patientController.getPatientSummary);
 
 // ============================================
 // PATIENT REGISTRATION ROUTES
@@ -195,5 +199,6 @@ router.get("/:patientId/complete-history", patientController.getCompleteMedicalH
  * @access  Public (should be automatic in production)
  */
 router.post("/:patientId/audit-log", patientController.logMedicalAccess);
+
 
 module.exports = router;
