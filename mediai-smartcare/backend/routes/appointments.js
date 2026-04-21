@@ -6,6 +6,7 @@
 const express = require("express");
 const router = express.Router();
 const appointmentController = require("../controllers/appointmentController");
+const { requireAuth, requireRole } = require("../middleware/authMiddleware");
 
 /**
  * @route   GET /api/appointments/available-doctors
@@ -13,7 +14,12 @@ const appointmentController = require("../controllers/appointmentController");
  * @query   date (YYYY-MM-DD)
  * @access  Public
  */
-router.get("/available-doctors", appointmentController.getAvailableDoctors);
+router.get(
+  "/available-doctors",
+  requireAuth,
+  requireRole("patient"),
+  appointmentController.getAvailableDoctors,
+);
 
 /**
  * @route   GET /api/appointments/available-slots
@@ -21,7 +27,12 @@ router.get("/available-doctors", appointmentController.getAvailableDoctors);
  * @query   doctorId, date (YYYY-MM-DD)
  * @access  Public
  */
-router.get("/available-slots", appointmentController.getAvailableSlots);
+router.get(
+  "/available-slots",
+  requireAuth,
+  requireRole("patient"),
+  appointmentController.getAvailableSlots,
+);
 
 /**
  * @route   POST /api/appointments/book
@@ -29,7 +40,12 @@ router.get("/available-slots", appointmentController.getAvailableSlots);
  * @body    scheduleId, doctorId, patientName, patientAge, patientGender, patientPhone, patientEmail, symptoms, appointmentDate, appointmentTime
  * @access  Public
  */
-router.post("/book", appointmentController.bookAppointment);
+router.post(
+  "/book",
+  requireAuth,
+  requireRole("patient"),
+  appointmentController.bookAppointment,
+);
 
 /**
  * @route   GET /api/appointments/doctor/:doctorId
@@ -38,7 +54,12 @@ router.post("/book", appointmentController.bookAppointment);
  * @query   date (optional), status (optional)
  * @access  Public (should be protected in production)
  */
-router.get("/doctor/:doctorId", appointmentController.getDoctorAppointments);
+router.get(
+  "/doctor/:doctorId",
+  requireAuth,
+  requireRole("doctor", "admin"),
+  appointmentController.getDoctorAppointments,
+);
 
 /**
  * @route   PUT /api/appointments/:appointmentId/cancel
@@ -46,7 +67,19 @@ router.get("/doctor/:doctorId", appointmentController.getDoctorAppointments);
  * @params  appointmentId
  * @access  Public (should be protected in production)
  */
-router.put("/:appointmentId/cancel", appointmentController.cancelAppointment);
+router.put(
+  "/:appointmentId/cancel",
+  requireAuth,
+  requireRole("patient", "doctor", "admin"),
+  appointmentController.cancelAppointment,
+);
+
+router.put(
+  "/:appointmentId/status",
+  requireAuth,
+  requireRole("doctor", "admin"),
+  appointmentController.updateAppointmentStatus,
+);
 
 /**
  * @route   PUT /api/appointments/:appointmentId/notes

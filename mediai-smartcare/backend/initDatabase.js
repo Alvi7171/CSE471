@@ -1,178 +1,446 @@
-// Initialize SQLite Database with Tables and Sample Data
+require("dotenv").config();
+
+console.log("USE_SQLITE:", process.env.USE_SQLITE);
+
+const fs = require("fs");
+const path = require("path");
+const bcrypt = require("bcryptjs");
 const { db } = require("./config/database");
 
-console.log("🔧 Initializing database...\n");
-
-try {
-  // Create doctors table
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS doctors (
-      doctor_id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      email TEXT UNIQUE NOT NULL,
-      phone TEXT,
-      specialization TEXT NOT NULL,
-      department TEXT NOT NULL,
-      qualification TEXT,
-      experience_years INTEGER DEFAULT 0,
-      consultation_fee REAL DEFAULT 500.00,
-      is_available INTEGER DEFAULT 1,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+const normalizeSqlForSqlite = (sql) =>
+  String(sql || "")
+    .replace(/\bFOR\s+UPDATE\b/gi, "")
+    .replace(
+      /DATE_SUB\s*\(\s*NOW\(\)\s*,\s*INTERVAL\s+(\d+)\s+DAY\s*\)/gi,
+      (_, days) => `datetime('now', '-${days} days')`,
+    )
+    .replace(/\bNOW\(\)/gi, "CURRENT_TIMESTAMP");
+const hasColumn = async (connection, tableName, columnName) => {
+  if (process.env.USE_SQLITE === 'true') {
+    const rows = connection.prepare(`PRAGMA table_info(${tableName})`).all();
+    return rows.some(row => row.name === columnName);
+  } else {
+    const [rows] = await connection.execute(
+      `
+      SELECT COLUMN_NAME
+      FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = ?
+        AND COLUMN_NAME = ?
+      LIMIT 1
+      `,
+      [tableName, columnName],
     );
-  `);
-  console.log("✅ Created doctors table");
-
-  // Create doctor_schedules table
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS doctor_schedules (
-      schedule_id INTEGER PRIMARY KEY AUTOINCREMENT,
-      doctor_id INTEGER NOT NULL,
-      day_of_week TEXT NOT NULL CHECK(day_of_week IN ('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday')),
-      start_time TEXT NOT NULL,
-      end_time TEXT NOT NULL,
-      slot_duration INTEGER DEFAULT 30,
-      is_active INTEGER DEFAULT 1,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (doctor_id) REFERENCES doctors(doctor_id) ON DELETE CASCADE,
-      UNIQUE (doctor_id, day_of_week, start_time)
-    );
-  `);
-  console.log("✅ Created doctor_schedules table");
-
-  // Create symptom_checks table
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS symptom_checks (
-      check_id INTEGER PRIMARY KEY AUTOINCREMENT,
-      patient_name TEXT,
-      patient_age INTEGER,
-      patient_gender TEXT CHECK(patient_gender IN ('Male', 'Female', 'Other')),
-      symptoms TEXT NOT NULL,
-      predicted_diseases TEXT,
-      urgency_level TEXT DEFAULT 'Low' CHECK(urgency_level IN ('Low', 'Medium', 'High', 'Emergency')),
-      recommended_specialist TEXT,
-      ai_advice TEXT,
-      check_date TEXT DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
-  console.log("✅ Created symptom_checks table");
-
-  // Create time_slots table
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS time_slots (
-      slot_id INTEGER PRIMARY KEY AUTOINCREMENT,
-      doctor_id INTEGER NOT NULL,
-      schedule_date TEXT NOT NULL,
-      start_time TEXT NOT NULL,
-      end_time TEXT NOT NULL,
-      is_booked INTEGER DEFAULT 0,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (doctor_id) REFERENCES doctors(doctor_id) ON DELETE CASCADE,
-      UNIQUE (doctor_id, schedule_date, start_time)
-    );
-  `);
-  console.log("✅ Created time_slots table");
-
-  // Insert sample doctors
-  const insertDoctor = db.prepare(`
-    INSERT OR IGNORE INTO doctors (name, email, phone, specialization, department, qualification, experience_years, consultation_fee)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-
-  const doctors = [
-    [
-      "Dr. Sarah Ahmed",
-      "sarah.ahmed@mediai.com",
-      "+8801712345678",
-      "Cardiologist",
-      "Cardiology",
-      "MBBS, MD (Cardiology)",
-      12,
-      1200.0,
-    ],
-    [
-      "Dr. Kamal Hassan",
-      "kamal.hassan@mediai.com",
-      "+8801812345679",
-      "Neurologist",
-      "Neurology",
-      "MBBS, MD (Neurology)",
-      15,
-      1500.0,
-    ],
-    [
-      "Dr. Nadia Islam",
-      "nadia.islam@mediai.com",
-      "+8801912345680",
-      "Pediatrician",
-      "Pediatrics",
-      "MBBS, DCH",
-      8,
-      800.0,
-    ],
-    [
-      "Dr. Rafiq Rahman",
-      "rafiq.rahman@mediai.com",
-      "+8801612345681",
-      "General Physician",
-      "General Medicine",
-      "MBBS",
-      5,
-      500.0,
-    ],
-    [
-      "Dr. Farah Khan",
-      "farah.khan@mediai.com",
-      "+8801512345682",
-      "Dermatologist",
-      "Dermatology",
-      "MBBS, MD (Dermatology)",
-      10,
-      1000.0,
-    ],
-  ];
-
-  for (const doctor of doctors) {
-    insertDoctor.run(doctor);
+    return rows.length > 0;
   }
-  console.log("✅ Inserted 5 sample doctors");
+};
 
-  // Insert sample schedules
-  const insertSchedule = db.prepare(`
-    INSERT OR IGNORE INTO doctor_schedules (doctor_id, day_of_week, start_time, end_time, slot_duration)
-    VALUES (?, ?, ?, ?, ?)
-  `);
+const safeExec = async (connection, sql) => {
+  try {
+    if (process.env.USE_SQLITE === 'true') {
+      connection.exec(sql);
+    } else {
+      await connection.query(sql);
+    }
+  } catch (error) {
+    const ignoredPatterns = [
+      "Duplicate column name",
+      "already exists",
+      "check that column/key exists",
+      "doesn't exist",
+    ];
 
-  const schedules = [
-    [1, "Monday", "09:00:00", "13:00:00", 30],
-    [1, "Wednesday", "09:00:00", "13:00:00", 30],
-    [1, "Friday", "14:00:00", "18:00:00", 30],
-    [2, "Tuesday", "10:00:00", "14:00:00", 30],
-    [2, "Thursday", "10:00:00", "14:00:00", 30],
-    [2, "Saturday", "09:00:00", "12:00:00", 30],
-    [3, "Monday", "14:00:00", "18:00:00", 20],
-    [3, "Tuesday", "14:00:00", "18:00:00", 20],
-    [3, "Wednesday", "14:00:00", "18:00:00", 20],
-    [3, "Friday", "09:00:00", "13:00:00", 20],
-    [4, "Monday", "08:00:00", "16:00:00", 15],
-    [4, "Tuesday", "08:00:00", "16:00:00", 15],
-    [4, "Wednesday", "08:00:00", "16:00:00", 15],
-    [4, "Thursday", "08:00:00", "16:00:00", 15],
-    [4, "Friday", "08:00:00", "16:00:00", 15],
-    [5, "Sunday", "10:00:00", "14:00:00", 30],
-    [5, "Tuesday", "15:00:00", "19:00:00", 30],
-    [5, "Thursday", "15:00:00", "19:00:00", 30],
-  ];
-
-  for (const schedule of schedules) {
-    insertSchedule.run(schedule);
+    if (
+      ignoredPatterns.some((pattern) => String(error.message).includes(pattern))
+    ) {
+      return;
+    }
+    throw error;
   }
-  console.log("✅ Inserted 18 doctor schedules");
+};
 
-  console.log("\n🎉 Database initialized successfully!");
-  console.log("📊 Database location: backend/mediai_smartcare.db");
-} catch (error) {
-  console.error("❌ Error initializing database:", error.message);
-  process.exit(1);
-}
+const run = async () => {
+  const connection = process.env.USE_SQLITE === 'true' ? db : await db.getConnection();
+
+  try {
+    console.log("Initializing schema...");
+
+    const schemaPath = path.join(__dirname, "models", "schema.sql");
+    let schemaSQL = fs.readFileSync(schemaPath, "utf8");
+
+    if (process.env.USE_SQLITE === 'true') {
+      schemaSQL = normalizeSqlForSqlite(schemaSQL);
+    }
+
+    const statements = schemaSQL
+      .split(";")
+      .map((stmt) => stmt.trim())
+      .filter((stmt) => stmt.length > 0);
+
+    for (const statement of statements) {
+      if (process.env.USE_SQLITE === 'true') {
+        connection.exec(statement);
+      } else {
+        await connection.query(statement);
+      }
+    }
+
+    // Railway-safe incremental migration for already-created tables.
+    if (process.env.USE_SQLITE !== 'true') {
+      await safeExec(
+        connection,
+        "ALTER TABLE users MODIFY email VARCHAR(120) NULL",
+      );
+    }
+    if (!(await hasColumn(connection, "users", "address"))) {
+      await safeExec(
+        connection,
+        "ALTER TABLE users ADD COLUMN address VARCHAR(255) NULL",
+      );
+    }
+    if (!(await hasColumn(connection, "users", "age"))) {
+      await safeExec(connection, "ALTER TABLE users ADD COLUMN age INT NULL");
+    }
+    if (!(await hasColumn(connection, "users", "gender"))) {
+      await safeExec(
+        connection,
+        "ALTER TABLE users ADD COLUMN gender ENUM('Male', 'Female', 'Other') NULL",
+      );
+    }
+
+    if (process.env.USE_SQLITE !== 'true') {
+      await safeExec(
+        connection,
+        "ALTER TABLE doctors MODIFY email VARCHAR(100) NULL",
+      );
+    }
+    if (!(await hasColumn(connection, "doctors", "degree"))) {
+      await safeExec(
+        connection,
+        "ALTER TABLE doctors ADD COLUMN degree VARCHAR(120) NULL",
+      );
+    }
+    if (!(await hasColumn(connection, "doctors", "medical_name"))) {
+      await safeExec(
+        connection,
+        "ALTER TABLE doctors ADD COLUMN medical_name VARCHAR(180) NULL",
+      );
+    }
+
+    if (process.env.USE_SQLITE !== 'true') {
+      await safeExec(
+        connection,
+        "ALTER TABLE appointments MODIFY status ENUM('pending', 'confirmed', 'declined', 'cancelled', 'completed') DEFAULT 'pending'",
+      );
+    }
+    if (!(await hasColumn(connection, "appointments", "patient_user_id"))) {
+      await safeExec(
+        connection,
+        "ALTER TABLE appointments ADD COLUMN patient_user_id INT NULL",
+      );
+      await safeExec(
+        connection,
+        "ALTER TABLE appointments ADD CONSTRAINT fk_appointments_patient_user FOREIGN KEY (patient_user_id) REFERENCES users (user_id) ON DELETE SET NULL",
+      );
+      await safeExec(
+        connection,
+        "CREATE INDEX idx_appointment_patient_user ON appointments (patient_user_id)",
+      );
+    }
+
+    console.log("Schema migration complete");
+
+    const defaultUsers = [
+      {
+        fullName: "Admin User",
+        email: "admin@mediai.com",
+        password: "Admin@123",
+        role: "admin",
+        doctorId: null,
+        phone: "+8801700000000",
+        address: null,
+        age: null,
+        gender: null,
+      },
+      {
+        fullName: "Patient Demo",
+        email: "patient@mediai.com",
+        password: "Patient@123",
+        role: "patient",
+        doctorId: null,
+        phone: "+8801800000000",
+        address: "Dhaka",
+        age: 28,
+        gender: "Female",
+      },
+    ];
+
+    for (const user of defaultUsers) {
+      const [existsRows] = await connection.execute(
+        "SELECT user_id FROM users WHERE email = ? LIMIT 1",
+        [user.email],
+      );
+
+      if (existsRows.length > 0) {
+        continue;
+      }
+
+      const passwordHash = await bcrypt.hash(user.password, 10);
+      await connection.execute(
+        `
+        INSERT INTO users
+        (full_name, email, password_hash, phone, address, age, gender, role, doctor_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `,
+        [
+          user.fullName,
+          user.email,
+          passwordHash,
+          user.phone,
+          user.address,
+          user.age,
+          user.gender,
+          user.role,
+          user.doctorId,
+        ],
+      );
+    }
+
+    // Seed doctors
+    const defaultDoctors = [
+      {
+        name: "Dr. Sarah Johnson",
+        email: "sarah.johnson@mediai.com",
+        phone: "+8801711111111",
+        degree: "MD",
+        specialization: "Cardiology",
+        department: "Cardiology",
+        qualification: "MBBS, MD Cardiology",
+        experience_years: 12,
+        consultation_fee: 1500.00,
+        is_available: 1,
+      },
+      {
+        name: "Dr. Michael Chen",
+        email: "michael.chen@mediai.com",
+        phone: "+8801722222222",
+        degree: "MBBS",
+        specialization: "Neurology",
+        department: "Neurology",
+        qualification: "MBBS, MD Neurology",
+        experience_years: 8,
+        consultation_fee: 1200.00,
+        is_available: 1,
+      },
+      {
+        name: "Dr. Emily Davis",
+        email: "emily.davis@mediai.com",
+        phone: "+8801733333333",
+        degree: "MD",
+        specialization: "Pediatrics",
+        department: "Pediatrics",
+        qualification: "MBBS, MD Pediatrics",
+        experience_years: 10,
+        consultation_fee: 1000.00,
+        is_available: 1,
+      },
+      {
+        name: "Dr. Robert Wilson",
+        email: "robert.wilson@mediai.com",
+        phone: "+8801744444444",
+        degree: "MBBS",
+        specialization: "Orthopedics",
+        department: "Orthopedics",
+        qualification: "MBBS, MS Orthopedics",
+        experience_years: 15,
+        consultation_fee: 1800.00,
+        is_available: 1,
+      },
+    ];
+
+    for (const doctor of defaultDoctors) {
+      const [existsRows] = await connection.execute(
+        "SELECT doctor_id FROM doctors WHERE email = ? LIMIT 1",
+        [doctor.email],
+      );
+
+      if (existsRows.length > 0) {
+        continue;
+      }
+
+      await connection.execute(
+        `
+        INSERT INTO doctors
+        (name, email, phone, degree, specialization, department, qualification, experience_years, consultation_fee, is_available)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `,
+        [
+          doctor.name,
+          doctor.email,
+          doctor.phone,
+          doctor.degree,
+          doctor.specialization,
+          doctor.department,
+          doctor.qualification,
+          doctor.experience_years,
+          doctor.consultation_fee,
+          doctor.is_available,
+        ],
+      );
+    }
+
+    // Seed appointments
+    const defaultAppointments = [
+      {
+        doctor_id: 1,
+        patient_name: "John Smith",
+        patient_age: 45,
+        patient_gender: "Male",
+        patient_phone: "+8801855555555",
+        patient_email: "john.smith@email.com",
+        appointment_date: "2024-04-15",
+        appointment_time: "10:00:00",
+        status: "completed",
+        symptoms: "Chest pain and shortness of breath",
+      },
+      {
+        doctor_id: 1,
+        patient_name: "Mary Johnson",
+        patient_age: 32,
+        patient_gender: "Female",
+        patient_phone: "+8801866666666",
+        patient_email: "mary.johnson@email.com",
+        appointment_date: "2024-04-16",
+        appointment_time: "14:30:00",
+        status: "completed",
+        symptoms: "Irregular heartbeat",
+      },
+      {
+        doctor_id: 2,
+        patient_name: "David Brown",
+        patient_age: 28,
+        patient_gender: "Male",
+        patient_phone: "+8801877777777",
+        patient_email: "david.brown@email.com",
+        appointment_date: "2024-04-17",
+        appointment_time: "11:00:00",
+        status: "completed",
+        symptoms: "Severe headaches and dizziness",
+      },
+      {
+        doctor_id: 3,
+        patient_name: "Lisa Anderson",
+        patient_age: 6,
+        patient_gender: "Female",
+        patient_phone: " +8801888888888",
+        patient_email: "lisa.anderson@email.com",
+        appointment_date: "2024-04-18",
+        appointment_time: "09:00:00",
+        status: "completed",
+        symptoms: "Fever and cough",
+      },
+      {
+        doctor_id: 4,
+        patient_name: "James Wilson",
+        patient_age: 55,
+        patient_gender: "Male",
+        patient_phone: "+8801899999999",
+        patient_email: "james.wilson@email.com",
+        appointment_date: "2024-04-19",
+        appointment_time: "15:00:00",
+        status: "completed",
+        symptoms: "Knee pain and difficulty walking",
+      },
+      {
+        doctor_id: 1,
+        patient_name: "Anna Garcia",
+        patient_age: 38,
+        patient_gender: "Female",
+        patient_phone: "+8801811111111",
+        patient_email: "anna.garcia@email.com",
+        appointment_date: "2024-04-20",
+        appointment_time: "13:00:00",
+        status: "completed",
+        symptoms: "High blood pressure",
+      },
+      {
+        doctor_id: 2,
+        patient_name: "Robert Lee",
+        patient_age: 42,
+        patient_gender: "Male",
+        patient_phone: "+8801822222222",
+        patient_email: "robert.lee@email.com",
+        appointment_date: "2024-04-21",
+        appointment_time: "10:30:00",
+        status: "completed",
+        symptoms: "Memory loss and confusion",
+      },
+      {
+        doctor_id: 3,
+        patient_name: "Emma Taylor",
+        patient_age: 8,
+        patient_gender: "Female",
+        patient_phone: "+8801833333333",
+        patient_email: "emma.taylor@email.com",
+        appointment_date: "2024-04-22",
+        appointment_time: "11:30:00",
+        status: "completed",
+        symptoms: "Ear infection",
+      },
+    ];
+
+    for (const appointment of defaultAppointments) {
+      // Check if appointment already exists (by date, time, doctor)
+      const [existsRows] = await connection.execute(
+        "SELECT appointment_id FROM appointments WHERE doctor_id = ? AND appointment_date = ? AND appointment_time = ? LIMIT 1",
+        [appointment.doctor_id, appointment.appointment_date, appointment.appointment_time],
+      );
+
+      if (existsRows.length > 0) {
+        continue;
+      }
+
+      await connection.execute(
+        `
+        INSERT INTO appointments
+        (doctor_id, patient_name, patient_age, patient_gender, patient_phone, patient_email, appointment_date, appointment_time, status, symptoms)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `,
+        [
+          appointment.doctor_id,
+          appointment.patient_name,
+          appointment.patient_age,
+          appointment.patient_gender,
+          appointment.patient_phone,
+          appointment.patient_email,
+          appointment.appointment_date,
+          appointment.appointment_time,
+          appointment.status,
+          appointment.symptoms,
+        ],
+      );
+    }
+
+    await connection.execute(
+      `
+      UPDATE doctors
+      SET degree = COALESCE(degree, qualification),
+          medical_name = COALESCE(medical_name, 'MediAI SmartCare Hospital')
+      WHERE doctor_id = 1
+      `,
+    );
+
+    console.log("Seed users ready");
+    console.log("admin@mediai.com / Admin@123");
+    console.log("patient@mediai.com / Patient@123");
+
+    process.exit(0);
+  } catch (error) {
+    console.error("Database initialization failed:", error.message);
+    process.exit(1);
+  } finally {
+    connection.release();
+  }
+};
+
+run();

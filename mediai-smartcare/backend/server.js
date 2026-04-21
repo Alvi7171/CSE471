@@ -2,11 +2,18 @@ const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
 
-const { testConnection } = require("./config/database");
+const { testConnection, engine } = require("./config/database");
 const scheduleRoutes = require("./routes/doctorSchedule");
 const symptomRoutes = require("./routes/symptomChecker");
 const appointmentRoutes = require("./routes/appointments");
+const authRoutes = require("./routes/auth");
+const adminRoutes = require("./routes/admin");
 const patientRoutes = require("./routes/patients");
+const analyticsRoutes = require("./routes/analytics");
+const notificationRoutes = require("./routes/notifications");
+const {
+  startNotificationScheduler,
+} = require("./utils/notificationService");
 
 // Initialize Express app
 const app = express();
@@ -49,10 +56,16 @@ app.get("/", (req, res) => {
     features: [
       "AI Symptom Checker & Triage System",
       "Doctor Scheduling & Availability Management",
+      "Appointment Notifications & Reminder Delivery",
+      "Patient Management & Medical Timeline",
+      "Hospital Analytics Reports & Dashboard",
     ],
     endpoints: {
       schedule: "/api/schedule",
       symptoms: "/api/symptoms",
+      notifications: "/api/notifications",
+      patients: "/api/patients",
+      analytics: "/api/analytics",
     },
     status: "Running",
   });
@@ -73,7 +86,11 @@ app.get("/api/status", (req, res) => {
 app.use("/api/schedule", scheduleRoutes);
 app.use("/api/symptoms", symptomRoutes);
 app.use("/api/appointments", appointmentRoutes);
+app.use("/api/auth", authRoutes);
+app.use("/api/admin", adminRoutes);
 app.use("/api/patients", patientRoutes);
+app.use("/api/analytics", analyticsRoutes);
+app.use("/api/notifications", notificationRoutes);
 
 // ============================================
 // Error Handling Middleware
@@ -101,21 +118,35 @@ app.use((err, req, res, next) => {
 // ============================================
 // Server Initialization
 // ============================================
-const startServer = () => {
+const startServer = async () => {
   try {
+    if (!process.env.JWT_SECRET) {
+      if ((process.env.NODE_ENV || "development") === "production") {
+        throw new Error("JWT_SECRET is required in environment variables");
+      }
+
+      process.env.JWT_SECRET = "dev-only-jwt-secret-change-me";
+      console.warn(
+        "JWT_SECRET not set. Using temporary development secret. Add JWT_SECRET to .env for production.",
+      );
+    }
+
     // Test database connection
     console.log("🔄 Testing database connection...");
-    testConnection();
+    await testConnection();
 
     // Start server
     app.listen(PORT, () => {
+      startNotificationScheduler();
       console.log("\n========================================");
       console.log("🏥 MediAI SmartCare Server Started");
       console.log("========================================");
       console.log(`📍 Server running on: http://localhost:${PORT}`);
       console.log(`👨‍💻 Student: MD Shafiur Rahman Alvi`);
       console.log(`🆔 ID: 23201355`);
-      console.log(`💾 Database: SQLite (Local File)`);
+      console.log(
+        `💾 Database: ${engine === "sqlite" ? "SQLite (local fallback)" : "MySQL (Railway compatible)"}`,
+      );
       console.log("========================================");
       console.log("\n📋 Available Endpoints:");
       console.log(`   - GET  http://localhost:${PORT}/`);

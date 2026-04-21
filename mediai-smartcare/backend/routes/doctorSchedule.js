@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const scheduleController = require("../controllers/scheduleController");
+const { requireAuth, requireRole } = require("../middleware/authMiddleware");
 
 /**
  * Doctor Scheduling Routes
@@ -17,7 +18,12 @@ const scheduleController = require("../controllers/scheduleController");
  * @desc    Get all available doctors
  * @access  Public
  */
-router.get("/doctors", scheduleController.getAllDoctors);
+router.get(
+  "/doctors",
+  requireAuth,
+  requireRole("doctor", "admin"),
+  scheduleController.getAllDoctors,
+);
 
 /**
  * @route   GET /api/schedule/doctors/search
@@ -25,14 +31,24 @@ router.get("/doctors", scheduleController.getAllDoctors);
  * @query   specialization, department
  * @access  Public
  */
-router.get("/doctors/search", scheduleController.searchDoctors);
+router.get(
+  "/doctors/search",
+  requireAuth,
+  requireRole("doctor", "admin"),
+  scheduleController.searchDoctors,
+);
 
 /**
  * @route   GET /api/schedule/doctors/:doctorId
  * @desc    Get specific doctor's schedule
  * @access  Public
  */
-router.get("/doctors/:doctorId", scheduleController.getDoctorSchedule);
+router.get(
+  "/doctors/:doctorId",
+  requireAuth,
+  requireRole("doctor", "admin"),
+  scheduleController.getDoctorSchedule,
+);
 
 // ============================================
 // Schedule Management Routes
@@ -44,7 +60,12 @@ router.get("/doctors/:doctorId", scheduleController.getDoctorSchedule);
  * @body    { doctorId, dayOfWeek, startTime, endTime, slotDuration }
  * @access  Private (Doctor/Admin)
  */
-router.post("/create", scheduleController.createDoctorSchedule);
+router.post(
+  "/create",
+  requireAuth,
+  requireRole("doctor", "admin"),
+  scheduleController.createDoctorSchedule,
+);
 
 /**
  * @route   PUT /api/schedule/:scheduleId
@@ -52,13 +73,23 @@ router.post("/create", scheduleController.createDoctorSchedule);
  * @body    { dayOfWeek, startTime, endTime, slotDuration, isActive }
  * @access  Private (Doctor/Admin)
  */
-router.put("/:scheduleId", scheduleController.updateDoctorSchedule);
+router.put(
+  "/:scheduleId",
+  requireAuth,
+  requireRole("doctor", "admin"),
+  scheduleController.updateDoctorSchedule,
+);
 
 /**
  * @route   DELETE /api/schedule/:scheduleId
  * @desc    Delete/deactivate schedule
  * @access  Private (Doctor/Admin)
  */
-router.delete("/:scheduleId", scheduleController.deleteDoctorSchedule);
+router.delete(
+  "/:scheduleId",
+  requireAuth,
+  requireRole("doctor", "admin"),
+  scheduleController.deleteDoctorSchedule,
+);
 
 module.exports = router;
