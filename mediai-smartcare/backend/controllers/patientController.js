@@ -256,7 +256,7 @@ exports.registerPatient = (req, res) => {
     });
   } catch (error) {
     console.error("❌ Error registering patient:", error.message);
-    
+
     // Handle specific database constraint errors
     let userMessage = "Error registering patient";
     if (error.message.includes("UNIQUE constraint failed: patients.phone_number")) {
@@ -270,7 +270,7 @@ exports.registerPatient = (req, res) => {
     } else if (error.message.includes("UNIQUE constraint failed")) {
       userMessage = "Duplicate data detected. Please check your information.";
     }
-    
+
     res.status(500).json({
       success: false,
       message: userMessage,

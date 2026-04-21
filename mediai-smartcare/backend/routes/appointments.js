@@ -81,4 +81,12 @@ router.put(
   appointmentController.updateAppointmentStatus,
 );
 
+/**
+ * @route   PUT /api/appointments/:appointmentId/notes
+ * @desc    Add notes/prescription to an appointment
+ * @params  appointmentId
+ * @access  Public
+ */
+router.put("/:appointmentId/notes", appointmentController.updateAppointmentNotes);
+
 module.exports = router;

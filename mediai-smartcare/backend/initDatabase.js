@@ -15,6 +15,7 @@ const normalizeSqlForSqlite = (sql) =>
       (_, days) => `datetime('now', '-${days} days')`,
     )
     .replace(/\bNOW\(\)/gi, "CURRENT_TIMESTAMP");
+const hasColumn = async (connection, tableName, columnName) => {
   if (process.env.USE_SQLITE === 'true') {
     const rows = connection.prepare(`PRAGMA table_info(${tableName})`).all();
     return rows.some(row => row.name === columnName);
