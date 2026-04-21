@@ -212,15 +212,15 @@ function AnalyticsReports() {
             <div className="absolute top-full left-0 right-0 bg-white border-2 border-blue-400 rounded-lg shadow-2xl mt-1 z-[9999] max-h-80 overflow-y-auto">
               {patientSearchResults.map((patient) => (
                 <button
-                  key={patient.patient_id}
+                  key={patient.user_id}
                   onClick={() => handleSelectPatient(patient)}
                   className="w-full text-left px-4 py-3 hover:bg-blue-100 border-b border-gray-200 last:border-b-0 transition-colors font-medium hover:shadow-md"
                 >
                   <div className="font-semibold text-gray-800">
-                    {patient.first_name} {patient.last_name}
+                    {patient.full_name}
                   </div>
                   <div className="text-sm text-gray-600">
-                    <span className="text-blue-600 font-mono font-bold">{patient.smart_patient_id}</span> • {patient.phone_number}
+                    ID: <span className="text-blue-600 font-mono font-bold">{patient.user_id}</span> • {patient.phone}
                   </div>
                 </button>
               ))}
@@ -233,7 +233,7 @@ function AnalyticsReports() {
       {selectedPatient && patientAnalytics && (
         <PatientTimelineView 
           patient={patientAnalytics.patient}
-          timeline={patientAnalytics.medicalTimeline}
+          timeline={patientAnalytics.appointmentHistory}
           contribution={patientAnalytics.analyticsContribution}
           onClose={handleClearPatient}
         />
@@ -884,11 +884,12 @@ function PatientTimelineView({ patient, timeline, contribution, onClose }) {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h2 className="text-3xl font-bold text-gray-800 mb-2">
-            👤 {patient.firstName} {patient.lastName}
+            👤 {patient.fullName}
           </h2>
           <p className="text-gray-600">
-            <span className="font-mono bg-white px-3 py-1 rounded text-blue-600 font-semibold">{patient.smartPatientId}</span>
-            {" "}• Gender: {patient.gender} • Blood Type: {patient.bloodType}
+            <span className="font-mono bg-white px-3 py-1 rounded text-blue-600 font-semibold">ID: {patient.userId}</span>
+            {patient.gender && ` • Gender: ${patient.gender}`}
+            {patient.age && ` • Age: ${patient.age}`}
           </p>
         </div>
         <button
@@ -899,107 +900,69 @@ function PatientTimelineView({ patient, timeline, contribution, onClose }) {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8">
         {/* Contribution Stats */}
         <div className="bg-white rounded-lg shadow p-4 border-l-4 border-blue-500">
           <div className="text-sm text-gray-600 mb-1">Registered</div>
-          <p className="text-2xl font-bold text-gray-800">
+          <p className="text-lg font-bold text-gray-800">
             {new Date(patient.registrationDate).toLocaleDateString()}
           </p>
         </div>
         <div className="bg-white rounded-lg shadow p-4 border-l-4 border-green-500">
-          <div className="text-sm text-gray-600 mb-1">Total Visits</div>
-          <p className="text-2xl font-bold text-green-600">{contribution.visitCount}</p>
+          <div className="text-sm text-gray-600 mb-1">Total Appointments</div>
+          <p className="text-2xl font-bold text-green-600">{contribution.appointmentCount}</p>
         </div>
         <div className="bg-white rounded-lg shadow p-4 border-l-4 border-purple-500">
-          <div className="text-sm text-gray-600 mb-1">Total Diagnostics</div>
-          <p className="text-2xl font-bold text-purple-600">{contribution.diagnosticCount}</p>
+          <div className="text-sm text-gray-600 mb-1">Doctors Visited</div>
+          <p className="text-2xl font-bold text-purple-600">{contribution.doctorCount}</p>
+        </div>
+        <div className="bg-white rounded-lg shadow p-4 border-l-4 border-orange-500">
+          <div className="text-sm text-gray-600 mb-1">Last Appointment</div>
+          <p className="text-lg font-bold text-gray-800">
+            {contribution.lastAppointmentDate ? new Date(contribution.lastAppointmentDate).toLocaleDateString() : 'N/A'}
+          </p>
         </div>
       </div>
 
       {/* Medical Timeline */}
       <div className="space-y-6">
-        {/* Visits */}
+        {/* Appointments */}
         <div>
-          <h3 className="text-xl font-bold text-gray-800 mb-4">📋 Recent Medical Visits</h3>
-          {timeline.visits && timeline.visits.length > 0 ? (
+          <h3 className="text-xl font-bold text-gray-800 mb-4">📋 Appointment History</h3>
+          {timeline && timeline.appointments && timeline.appointments.length > 0 ? (
             <div className="space-y-3">
-              {timeline.visits.map((visit) => (
+              {timeline.appointments.map((appointment) => (
                 <div
-                  key={visit.visit_id}
+                  key={appointment.appointment_id}
                   className="bg-white p-4 rounded-lg border-l-4 border-blue-500 hover:shadow-md transition-shadow"
                 >
                   <div className="flex justify-between items-start mb-2">
-                    <div className="font-semibold text-gray-800">{visit.reason_for_visit}</div>
-                    <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
-                      visit.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
-                    }`}>
-                      {visit.status}
-                    </span>
-                  </div>
-                  <p className="text-sm text-gray-600">{new Date(visit.visit_date).toLocaleDateString()}</p>
-                  {visit.notes && <p className="text-sm text-gray-700 mt-2 italic">Notes: {visit.notes}</p>}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-gray-500 italic">No visit records found</p>
-          )}
-        </div>
-
-        {/* Diagnostics */}
-        <div>
-          <h3 className="text-xl font-bold text-gray-800 mb-4">🔬 Recent Diagnostic Reports</h3>
-          {timeline.diagnostics && timeline.diagnostics.length > 0 ? (
-            <div className="space-y-3">
-              {timeline.diagnostics.map((diag) => (
-                <div
-                  key={diag.report_id}
-                  className="bg-white p-4 rounded-lg border-l-4 border-purple-500 hover:shadow-md transition-shadow"
-                >
-                  <div className="flex justify-between items-start mb-2">
                     <div>
-                      <div className="font-semibold text-gray-800">{diag.report_type}</div>
-                      <p className="text-sm text-gray-600">{new Date(diag.report_date).toLocaleDateString()}</p>
+                      <div className="font-semibold text-gray-800">
+                        Dr. {appointment.doctor_name} ({appointment.department})
+                      </div>
+                      <div className="text-sm text-gray-600">
+                        Specialization: {appointment.specialization}
+                      </div>
                     </div>
                     <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
-                      diag.urgency_level === 'Critical' ? 'bg-red-100 text-red-700' :
-                      diag.urgency_level === 'High' ? 'bg-orange-100 text-orange-700' :
-                      'bg-green-100 text-green-700'
+                      appointment.status === 'completed' ? 'bg-green-100 text-green-700' : 
+                      appointment.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                      'bg-red-100 text-red-700'
                     }`}>
-                      {diag.urgency_level}
+                      {appointment.status.charAt(0).toUpperCase() + appointment.status.slice(1)}
                     </span>
                   </div>
-                  {diag.findings && <p className="text-sm text-gray-700">Findings: {diag.findings}</p>}
+                  <p className="text-sm text-gray-600">
+                    📅 {new Date(appointment.appointment_date).toLocaleDateString()} at {appointment.appointment_time}
+                  </p>
+                  {appointment.symptoms && <p className="text-sm text-gray-700 mt-2">Symptoms: {appointment.symptoms}</p>}
                 </div>
               ))}
             </div>
           ) : (
-            <p className="text-gray-500 italic">No diagnostic reports found</p>
+            <p className="text-gray-500 italic">No appointment records found</p>
           )}
-        </div>
-
-        {/* Contact Info */}
-        <div className="bg-white rounded-lg p-4 border-l-4 border-indigo-500">
-          <h4 className="font-semibold text-gray-800 mb-3">📞 Contact Information</h4>
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <p className="text-gray-600">Phone</p>
-              <p className="text-gray-800 font-semibold">{patient.phoneNumber}</p>
-            </div>
-            <div>
-              <p className="text-gray-600">Email</p>
-              <p className="text-gray-800 font-semibold">{patient.email || 'N/A'}</p>
-            </div>
-            <div>
-              <p className="text-gray-600">Date of Birth</p>
-              <p className="text-gray-800 font-semibold">{new Date(patient.dateOfBirth).toLocaleDateString()}</p>
-            </div>
-            <div>
-              <p className="text-gray-600">Blood Type</p>
-              <p className="text-gray-800 font-semibold">{patient.bloodType}</p>
-            </div>
-          </div>
         </div>
       </div>
     </div>
