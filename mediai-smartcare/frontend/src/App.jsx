@@ -35,11 +35,17 @@ const roleTabs = {
     { key: "booking", label: "Book Appointment" },
     { key: "timeline", label: "Patient Records" },
   ],
-  doctor: [{ key: "schedule", label: "Doctor Schedule" }],
+  doctor: [
+    { key: "schedule", label: "Doctor Schedule" },
+    { key: "labtests", label: "Lab Tests" },
+    { key: "emergency", label: "Emergency Response" },
+  ],
   admin: [
     { key: "schedule", label: "Doctor Schedule" },
     { key: "registration", label: "Patient Registration" },
     { key: "analytics", label: "Analytics Dashboard" },
+    { key: "labtests", label: "Lab Test Management" },
+    { key: "emergency", label: "Emergency Response" },
     { key: "admin", label: "Admin Console" },
   ],
 };
@@ -539,6 +545,12 @@ function App() {
               )}
             {activeTab === "registration" && user.role === "admin" && (
               <PatientRegistration />
+            )}
+            {(activeTab === "labtests") && (
+              <LabTestManagement />
+            )}
+            {(activeTab === "emergency") && (
+              <EmergencyResponse />
             )}
           </main>
 
