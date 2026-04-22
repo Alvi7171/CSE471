@@ -16,9 +16,9 @@ const normalizeSqlForSqlite = (sql) =>
     )
     .replace(/\bNOW\(\)/gi, "CURRENT_TIMESTAMP");
 const hasColumn = async (connection, tableName, columnName) => {
-  if (process.env.USE_SQLITE === 'true') {
+  if (process.env.USE_SQLITE === "true") {
     const rows = connection.prepare(`PRAGMA table_info(${tableName})`).all();
-    return rows.some(row => row.name === columnName);
+    return rows.some((row) => row.name === columnName);
   } else {
     const [rows] = await connection.execute(
       `
@@ -37,7 +37,7 @@ const hasColumn = async (connection, tableName, columnName) => {
 
 const safeExec = async (connection, sql) => {
   try {
-    if (process.env.USE_SQLITE === 'true') {
+    if (process.env.USE_SQLITE === "true") {
       connection.exec(sql);
     } else {
       await connection.query(sql);
@@ -60,7 +60,8 @@ const safeExec = async (connection, sql) => {
 };
 
 const run = async () => {
-  const connection = process.env.USE_SQLITE === 'true' ? db : await db.getConnection();
+  const connection =
+    process.env.USE_SQLITE === "true" ? db : await db.getConnection();
 
   try {
     console.log("Initializing schema...");
@@ -68,7 +69,7 @@ const run = async () => {
     const schemaPath = path.join(__dirname, "models", "schema.sql");
     let schemaSQL = fs.readFileSync(schemaPath, "utf8");
 
-    if (process.env.USE_SQLITE === 'true') {
+    if (process.env.USE_SQLITE === "true") {
       schemaSQL = normalizeSqlForSqlite(schemaSQL);
     }
 
@@ -78,7 +79,7 @@ const run = async () => {
       .filter((stmt) => stmt.length > 0);
 
     for (const statement of statements) {
-      if (process.env.USE_SQLITE === 'true') {
+      if (process.env.USE_SQLITE === "true") {
         connection.exec(statement);
       } else {
         await connection.query(statement);
@@ -86,7 +87,7 @@ const run = async () => {
     }
 
     // Railway-safe incremental migration for already-created tables.
-    if (process.env.USE_SQLITE !== 'true') {
+    if (process.env.USE_SQLITE !== "true") {
       await safeExec(
         connection,
         "ALTER TABLE users MODIFY email VARCHAR(120) NULL",
@@ -108,7 +109,7 @@ const run = async () => {
       );
     }
 
-    if (process.env.USE_SQLITE !== 'true') {
+    if (process.env.USE_SQLITE !== "true") {
       await safeExec(
         connection,
         "ALTER TABLE doctors MODIFY email VARCHAR(100) NULL",
@@ -127,7 +128,7 @@ const run = async () => {
       );
     }
 
-    if (process.env.USE_SQLITE !== 'true') {
+    if (process.env.USE_SQLITE !== "true") {
       await safeExec(
         connection,
         "ALTER TABLE appointments MODIFY status ENUM('pending', 'confirmed', 'declined', 'cancelled', 'completed') DEFAULT 'pending'",
@@ -149,6 +150,45 @@ const run = async () => {
     }
 
     console.log("Schema migration complete");
+
+    // Initialize Billing & Roster schema
+    const billingRosterSchemaPath = path.join(
+      __dirname,
+      "models",
+      "billingAndRosterSchema.sql",
+    );
+
+    if (fs.existsSync(billingRosterSchemaPath)) {
+      let billingRosterSQL = fs.readFileSync(billingRosterSchemaPath, "utf8");
+
+      if (process.env.USE_SQLITE === "true") {
+        billingRosterSQL = normalizeSqlForSqlite(billingRosterSQL);
+      }
+
+      const billingStatements = billingRosterSQL
+        .split(";")
+        .map((stmt) => stmt.trim())
+        .filter((stmt) => stmt.length > 0);
+
+      for (const statement of billingStatements) {
+        try {
+          if (process.env.USE_SQLITE === "true") {
+            connection.exec(statement);
+          } else {
+            await connection.query(statement);
+          }
+        } catch (error) {
+          if (!String(error.message).includes("already exists")) {
+            console.error(
+              "Error executing billing/roster schema statement:",
+              error.message,
+            );
+          }
+        }
+      }
+
+      console.log("Billing & Roster schema initialized successfully");
+    }
 
     const defaultUsers = [
       {
@@ -217,7 +257,7 @@ const run = async () => {
         department: "Cardiology",
         qualification: "MBBS, MD Cardiology",
         experience_years: 12,
-        consultation_fee: 1500.00,
+        consultation_fee: 1500.0,
         is_available: 1,
       },
       {
@@ -229,7 +269,7 @@ const run = async () => {
         department: "Neurology",
         qualification: "MBBS, MD Neurology",
         experience_years: 8,
-        consultation_fee: 1200.00,
+        consultation_fee: 1200.0,
         is_available: 1,
       },
       {
@@ -241,7 +281,7 @@ const run = async () => {
         department: "Pediatrics",
         qualification: "MBBS, MD Pediatrics",
         experience_years: 10,
-        consultation_fee: 1000.00,
+        consultation_fee: 1000.0,
         is_available: 1,
       },
       {
@@ -253,7 +293,7 @@ const run = async () => {
         department: "Orthopedics",
         qualification: "MBBS, MS Orthopedics",
         experience_years: 15,
-        consultation_fee: 1800.00,
+        consultation_fee: 1800.0,
         is_available: 1,
       },
     ];
@@ -393,7 +433,11 @@ const run = async () => {
       // Check if appointment already exists (by date, time, doctor)
       const [existsRows] = await connection.execute(
         "SELECT appointment_id FROM appointments WHERE doctor_id = ? AND appointment_date = ? AND appointment_time = ? LIMIT 1",
-        [appointment.doctor_id, appointment.appointment_date, appointment.appointment_time],
+        [
+          appointment.doctor_id,
+          appointment.appointment_date,
+          appointment.appointment_time,
+        ],
       );
 
       if (existsRows.length > 0) {

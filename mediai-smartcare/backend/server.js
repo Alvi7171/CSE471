@@ -11,9 +11,9 @@ const adminRoutes = require("./routes/admin");
 const patientRoutes = require("./routes/patients");
 const analyticsRoutes = require("./routes/analytics");
 const notificationRoutes = require("./routes/notifications");
-const {
-  startNotificationScheduler,
-} = require("./utils/notificationService");
+const billingRoutes = require("./routes/billing");
+const rosterRoutes = require("./routes/roster");
+const { startNotificationScheduler } = require("./utils/notificationService");
 
 // Initialize Express app
 const app = express();
@@ -91,6 +91,8 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/patients", patientRoutes);
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/billing", billingRoutes);
+app.use("/api/roster", rosterRoutes);
 
 // ============================================
 // Error Handling Middleware
@@ -176,7 +178,9 @@ const startServer = async () => {
       );
       console.log("\n👥 Patient Management APIs:");
       console.log(`   - GET  http://localhost:${PORT}/api/patients`);
-      console.log(`   - GET  http://localhost:${PORT}/api/patients/:phone/timeline`);
+      console.log(
+        `   - GET  http://localhost:${PORT}/api/patients/:phone/timeline`,
+      );
       console.log("========================================\n");
       console.log("✅ Server is ready to accept requests!\n");
     });

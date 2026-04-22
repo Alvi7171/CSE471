@@ -7,10 +7,10 @@ const express = require("express");
 const router = express.Router();
 const patientController = require("../controllers/patientController");
 
-// Dev_Ornov Routes
-router.get("/", patientController.getAllPatients);
-router.get("/phone/:phone/timeline", patientController.getPatientTimelineByPhone);
-router.get("/phone/:phone/summary", patientController.getPatientSummary);
+// Dev_Ornov Routes (commented out - functions not implemented)
+// router.get("/", patientController.getAllPatients);
+// router.get("/phone/:phone/timeline", patientController.getPatientTimelineByPhone);
+// router.get("/phone/:phone/summary", patientController.getPatientSummary);
 
 // ============================================
 // PATIENT REGISTRATION ROUTES
@@ -122,7 +122,10 @@ router.post("/:patientId/prescriptions", patientController.addPrescription);
  * @query   activeOnly (boolean) - Get only active prescriptions
  * @access  Public (should be protected in production)
  */
-router.get("/:patientId/prescriptions", patientController.getPatientPrescriptions);
+router.get(
+  "/:patientId/prescriptions",
+  patientController.getPatientPrescriptions,
+);
 
 // ============================================
 // TREATMENT TIMELINE ROUTES
@@ -177,7 +180,10 @@ router.get("/:patientId/access", patientController.getPatientAccessList);
  * @params  patientId, doctorId
  * @access  Public (should be patient/admin-only in production)
  */
-router.delete("/:patientId/access/:doctorId", patientController.revokeDoctorAccess);
+router.delete(
+  "/:patientId/access/:doctorId",
+  patientController.revokeDoctorAccess,
+);
 
 // ============================================
 // COMPLETE MEDICAL HISTORY ROUTES
@@ -189,7 +195,10 @@ router.delete("/:patientId/access/:doctorId", patientController.revokeDoctorAcce
  * @params  patientId
  * @access  Public (should be doctor/patient-only in production)
  */
-router.get("/:patientId/complete-history", patientController.getCompleteMedicalHistory);
+router.get(
+  "/:patientId/complete-history",
+  patientController.getCompleteMedicalHistory,
+);
 
 /**
  * @route   POST /api/patients/:patientId/audit-log
@@ -199,6 +208,5 @@ router.get("/:patientId/complete-history", patientController.getCompleteMedicalH
  * @access  Public (should be automatic in production)
  */
 router.post("/:patientId/audit-log", patientController.logMedicalAccess);
-
 
 module.exports = router;

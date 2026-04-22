@@ -1,13 +1,13 @@
-import React, { useEffect, useMemo, useState } from "react";
-import SymptomChecker from "./components/SymptomChecker";
-import DoctorSchedule from "./components/DoctorSchedule";
-import PatientBooking from "./components/PatientBooking";
-import PatientTimeline from "./components/PatientTimeline";
-import { authAPI } from "./services/api";
-import PatientRegistration from "./components/PatientRegistration";
+import { useEffect, useMemo, useState } from "react";
 import AnalyticsReports from "./components/AnalyticsReports";
+import DoctorSchedule from "./components/DoctorSchedule";
 import NotificationCenter from "./components/NotificationCenter";
+import PatientBooking from "./components/PatientBooking";
+import PatientRegistration from "./components/PatientRegistration";
+import PatientTimeline from "./components/PatientTimeline";
+import SymptomChecker from "./components/SymptomChecker";
 import "./index.css";
+import { authAPI } from "./services/api";
 
 const DEPARTMENTS = [
   "Cardiology",
@@ -38,6 +38,8 @@ const roleTabs = {
     { key: "schedule", label: "Doctor Schedule" },
     { key: "registration", label: "Patient Registration" },
     { key: "analytics", label: "Analytics Dashboard" },
+    { key: "billing", label: "Billing & Payments" },
+    { key: "roster", label: "Staff Roster" },
     { key: "admin", label: "Admin Console" },
   ],
 };
@@ -116,23 +118,23 @@ function App() {
       const payload =
         authMode === "register"
           ? {
-              fullName: authForm.fullName,
-              password: authForm.password,
-              role: selectedRegisterRole,
-              email: authForm.email,
-              phone: authForm.phone,
-              degree: authForm.degree,
-              department: authForm.department,
-              experienceYears: authForm.experienceYears,
-              medicalName: authForm.medicalName,
-              address: authForm.address,
-              age: authForm.age,
-              gender: authForm.gender,
-            }
+            fullName: authForm.fullName,
+            password: authForm.password,
+            role: selectedRegisterRole,
+            email: authForm.email,
+            phone: authForm.phone,
+            degree: authForm.degree,
+            department: authForm.department,
+            experienceYears: authForm.experienceYears,
+            medicalName: authForm.medicalName,
+            address: authForm.address,
+            age: authForm.age,
+            gender: authForm.gender,
+          }
           : {
-              identifier: authForm.email,
-              password: authForm.password,
-            };
+            identifier: authForm.email,
+            password: authForm.password,
+          };
 
       const response =
         authMode === "register"
@@ -364,11 +366,10 @@ function App() {
 
           <div className="flex rounded-xl bg-theme-soft p-1 mb-5">
             <button
-              className={`flex-1 py-2 rounded-lg text-sm font-semibold ${
-                authMode === "login"
-                  ? "bg-white text-theme-primary shadow"
-                  : "text-gray-600"
-              }`}
+              className={`flex-1 py-2 rounded-lg text-sm font-semibold ${authMode === "login"
+                ? "bg-white text-theme-primary shadow"
+                : "text-gray-600"
+                }`}
               onClick={() => {
                 setAuthMode("login");
                 setAuthError("");
@@ -377,11 +378,10 @@ function App() {
               Login
             </button>
             <button
-              className={`flex-1 py-2 rounded-lg text-sm font-semibold ${
-                authMode === "register"
-                  ? "bg-white text-theme-primary shadow"
-                  : "text-gray-600"
-              }`}
+              className={`flex-1 py-2 rounded-lg text-sm font-semibold ${authMode === "register"
+                ? "bg-white text-theme-primary shadow"
+                : "text-gray-600"
+                }`}
               onClick={() => {
                 setAuthMode("register");
                 setAuthError("");
@@ -398,11 +398,10 @@ function App() {
                   key={item.key}
                   type="button"
                   onClick={() => setSelectedRegisterRole(item.key)}
-                  className={`border rounded-xl p-3 text-center transition ${
-                    selectedRegisterRole === item.key
-                      ? "border-theme-primary bg-theme-soft"
-                      : "border-gray-200 bg-white"
-                  }`}
+                  className={`border rounded-xl p-3 text-center transition ${selectedRegisterRole === item.key
+                    ? "border-theme-primary bg-theme-soft"
+                    : "border-gray-200 bg-white"
+                    }`}
                 >
                   <div className="text-2xl mb-1">{item.icon}</div>
                   <div className="font-semibold text-sm">{item.label}</div>
@@ -473,11 +472,10 @@ function App() {
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
-                className={`w-full text-left px-4 py-3 rounded-xl transition-all duration-200 ${
-                  activeTab === tab.key
-                    ? "bg-white/15 border-l-4 border-theme-accent"
-                    : "hover:bg-white/10"
-                }`}
+                className={`w-full text-left px-4 py-3 rounded-xl transition-all duration-200 ${activeTab === tab.key
+                  ? "bg-white/15 border-l-4 border-theme-accent"
+                  : "hover:bg-white/10"
+                  }`}
               >
                 {tab.label}
               </button>
