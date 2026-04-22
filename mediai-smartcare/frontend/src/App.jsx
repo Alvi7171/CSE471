@@ -6,6 +6,8 @@ import PatientBooking from "./components/PatientBooking";
 import PatientRegistration from "./components/PatientRegistration";
 import PatientTimeline from "./components/PatientTimeline";
 import SymptomChecker from "./components/SymptomChecker";
+import LabTestManagement from "./components/LabTestManagement";
+import EmergencyResponse from "./components/EmergencyResponse";
 import "./index.css";
 import { authAPI } from "./services/api";
 
@@ -33,13 +35,19 @@ const roleTabs = {
     { key: "booking", label: "Book Appointment" },
     { key: "timeline", label: "Patient Records" },
   ],
-  doctor: [{ key: "schedule", label: "Doctor Schedule" }],
+  doctor: [
+    { key: "schedule", label: "Doctor Schedule" },
+    { key: "labtests", label: "Lab Tests" },
+    { key: "emergency", label: "Emergency Response" },
+  ],
   admin: [
     { key: "schedule", label: "Doctor Schedule" },
     { key: "registration", label: "Patient Registration" },
     { key: "analytics", label: "Analytics Dashboard" },
     { key: "billing", label: "Billing & Payments" },
     { key: "roster", label: "Staff Roster" },
+    { key: "labtests", label: "Lab Test Management" },
+    { key: "emergency", label: "Emergency Response" },
     { key: "admin", label: "Admin Console" },
   ],
 };
@@ -535,6 +543,12 @@ function App() {
               )}
             {activeTab === "registration" && user.role === "admin" && (
               <PatientRegistration />
+            )}
+            {(activeTab === "labtests") && (
+              <LabTestManagement />
+            )}
+            {(activeTab === "emergency") && (
+              <EmergencyResponse />
             )}
           </main>
 

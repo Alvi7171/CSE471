@@ -999,3 +999,115 @@ exports.logMedicalAccess = (req, res) => {
     });
   }
 };
+
+// ============================================
+// AI PATIENT SUMMARY ENDPOINT
+// ============================================
+
+const { generatePatientSummary } = require("../utils/aiService");
+
+/**
+ * Get AI-generated patient history summary
+ * GET /api/patients/phone/:phone/summary
+ */
+exports.getPatientSummary = async (req, res) => {
+  try {
+    const { phone } = req.params;
+
+    // Find patient by phone
+    const patientStmt = db.prepare("SELECT * FROM patients WHERE phone_number = ?");
+    const patient = patientStmt.get(phone);
+
+    if (!patient) {
+      return res.status(404).json({
+        success: false,
+        message: "Patient not found with this phone number",
+      });
+    }
+
+    const patientId = patient.patient_id;
+
+    // Get all medical data for timeline
+    const visitsStmt = db.prepare(`
+      SELECT mv.*, d.name as doctor_name, d.specialization
+      FROM medical_visits mv
+      LEFT JOIN doctors d ON mv.doctor_id = d.doctor_id
+      WHERE mv.patient_id = ?
+      ORDER BY mv.visit_date DESC
+      LIMIT 20
+    `);
+    const visits = visitsStmt.all(patientId);
+
+    const reportsStmt = db.prepare(`
+      SELECT dr.*, d.name as doctor_name
+      FROM diagnostic_reports dr
+      LEFT JOIN doctors d ON dr.doctor_id = d.doctor_id
+      WHERE dr.patient_id = ?
+      ORDER BY dr.report_date DESC
+      LIMIT 20
+    `);
+    const reports = reportsStmt.all(patientId);
+
+    const prescriptionsStmt = db.prepare(`
+      SELECT p.*, d.name as doctor_name
+      FROM prescriptions p
+      LEFT JOIN doctors d ON p.doctor_id = d.doctor_id
+      WHERE p.patient_id = ?
+      ORDER BY p.prescription_date DESC
+      LIMIT 20
+    `);
+    const prescriptions = prescriptionsStmt.all(patientId);
+
+    const timelineStmt = db.prepare(`
+      SELECT tt.*, d.name as doctor_name
+      FROM treatment_timeline tt
+      LEFT JOIN doctors d ON tt.doctor_id = d.doctor_id
+      WHERE tt.patient_id = ?
+      ORDER BY tt.treatment_date DESC
+      LIMIT 20
+    `);
+    const timeline = timelineStmt.all(patientId);
+
+    // Prepare patient info
+    const patientInfo = {
+      name: `${patient.first_name} ${patient.last_name}`,
+      age: patient.date_of_birth ? new Date().getFullYear() - new Date(patient.date_of_birth).getFullYear() : null,
+      gender: patient.gender,
+      bloodType: patient.blood_type,
+      allergies: patient.allergies,
+      chronicDiseases: patient.chronic_diseases,
+      currentMedications: patient.current_medications,
+    };
+
+    // Build timeline data array
+    const timelineData = [
+      ...visits.map(v => ({ type: 'visit', date: v.visit_date, data: v })),
+      ...reports.map(r => ({ type: 'report', date: r.report_date, data: r })),
+      ...prescriptions.map(p => ({ type: 'prescription', date: p.prescription_date, data: p })),
+      ...timeline.map(t => ({ type: 'treatment', date: t.treatment_date, data: t }))
+    ].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    // Call AI service to generate summary
+    const aiResult = await generatePatientSummary(patientInfo, timelineData);
+
+    if (aiResult.success) {
+      res.json({
+        success: true,
+        summary: aiResult.summary,
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        message: "Failed to generate AI summary",
+        error: aiResult.error,
+      });
+    }
+  } catch (error) {
+    console.error("Error generating patient summary:", error.message);
+    res.status(500).json({
+      success: false,
+      message: "Error generating patient summary",
+      error: error.message,
+    });
+  }
+};

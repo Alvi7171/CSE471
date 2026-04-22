@@ -13,7 +13,10 @@ const analyticsRoutes = require("./routes/analytics");
 const notificationRoutes = require("./routes/notifications");
 const billingRoutes = require("./routes/billing");
 const rosterRoutes = require("./routes/roster");
-const { startNotificationScheduler } = require("./utils/notificationService");
+const labEmergencyRoutes = require("./routes/labEmergency");
+const {
+  startNotificationScheduler,
+} = require("./utils/notificationService");
 
 // Initialize Express app
 const app = express();
@@ -93,6 +96,8 @@ app.use("/api/analytics", analyticsRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/billing", billingRoutes);
 app.use("/api/roster", rosterRoutes);
+app.use("/api/lab", labEmergencyRoutes);
+app.use("/api/emergency", labEmergencyRoutes);
 
 // ============================================
 // Error Handling Middleware
