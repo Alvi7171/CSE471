@@ -48,9 +48,9 @@ exports.getNotifications = async (req, res) => {
         AND channel = 'portal'
         AND status IN ('sent', 'read')
       ORDER BY COALESCE(sent_at, created_at) DESC
-      LIMIT ?
+      LIMIT ${limit}
       `,
-      [req.user.userId, limit],
+      [req.user.userId],
     );
 
     const unreadRows = await query(

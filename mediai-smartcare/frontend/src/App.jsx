@@ -8,6 +8,8 @@ import PatientTimeline from "./components/PatientTimeline";
 import SymptomChecker from "./components/SymptomChecker";
 import LabTestManagement from "./components/LabTestManagement";
 import EmergencyResponse from "./components/EmergencyResponse";
+import InventoryManagement from "./components/InventoryManagement";
+import BedAllocationDashboard from "./components/BedAllocationDashboard";
 import "./index.css";
 import { authAPI } from "./services/api";
 
@@ -42,13 +44,14 @@ const roleTabs = {
   ],
   admin: [
     { key: "schedule", label: "Doctor Schedule" },
+    { key: "beds", label: "AI Bed Allocation" },
+    { key: "inventory", label: "Inventory & Medicines" },
     { key: "registration", label: "Patient Registration" },
     { key: "analytics", label: "Analytics Dashboard" },
     { key: "billing", label: "Billing & Payments" },
     { key: "roster", label: "Staff Roster" },
     { key: "labtests", label: "Lab Test Management" },
     { key: "emergency", label: "Emergency Response" },
-    { key: "admin", label: "Admin Console" },
   ],
 };
 
@@ -556,22 +559,14 @@ function App() {
             <AnalyticsReports />
           )}
 
-          {activeTab === "admin" && user.role === "admin" && (
-            <div className="bg-white/85 backdrop-blur-md border border-white/70 rounded-2xl p-8 shadow-sm">
-              <h3 className="text-2xl font-semibold text-theme-primary mb-3">
-                Admin Console
-              </h3>
-              <p className="text-gray-700 mb-4">
-                Admin area is ready. You can add user management, reports, and
-                operational tools next.
-              </p>
-              <ul className="text-gray-700 space-y-2 list-disc pl-5">
-                <li>Manage doctors and role assignments</li>
-                <li>Review appointment analytics</li>
-                <li>Configure hospital-level settings</li>
-              </ul>
-            </div>
+          {activeTab === "inventory" && user.role === "admin" && (
+            <InventoryManagement />
           )}
+
+          {activeTab === "beds" && user.role === "admin" && (
+            <BedAllocationDashboard />
+          )}
+
         </section>
       </div>
     </div>

@@ -29,6 +29,13 @@ const generateSmartPatientID = () => {
  */
 const initializePatientTables = () => {
   try {
+    if (typeof db.exec !== "function") {
+      console.log(
+        "ℹ️ Skipping SQLite patient table bootstrap for non-SQLite database engine",
+      );
+      return;
+    }
+
     db.exec(`
       CREATE TABLE IF NOT EXISTS patients (
         patient_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -259,13 +266,25 @@ exports.registerPatient = (req, res) => {
 
     // Handle specific database constraint errors
     let userMessage = "Error registering patient";
-    if (error.message.includes("UNIQUE constraint failed: patients.phone_number")) {
-      userMessage = "This phone number is already registered. Please use a different phone number.";
-    } else if (error.message.includes("UNIQUE constraint failed: patients.email")) {
-      userMessage = "This email is already registered. Please use a different email.";
-    } else if (error.message.includes("UNIQUE constraint failed: patients.smart_patient_id")) {
+    if (
+      error.message.includes("UNIQUE constraint failed: patients.phone_number")
+    ) {
+      userMessage =
+        "This phone number is already registered. Please use a different phone number.";
+    } else if (
+      error.message.includes("UNIQUE constraint failed: patients.email")
+    ) {
+      userMessage =
+        "This email is already registered. Please use a different email.";
+    } else if (
+      error.message.includes(
+        "UNIQUE constraint failed: patients.smart_patient_id",
+      )
+    ) {
       userMessage = "Smart Patient ID collision. Please try again.";
-    } else if (error.message.includes("UNIQUE constraint failed: patients.national_id")) {
+    } else if (
+      error.message.includes("UNIQUE constraint failed: patients.national_id")
+    ) {
       userMessage = "This national ID is already registered.";
     } else if (error.message.includes("UNIQUE constraint failed")) {
       userMessage = "Duplicate data detected. Please check your information.";
@@ -892,7 +911,9 @@ exports.getCompleteMedicalHistory = (req, res) => {
     let patientStmt;
     if (patientId.startsWith("SPC-")) {
       // Search by Smart Patient ID
-      patientStmt = db.prepare("SELECT * FROM patients WHERE smart_patient_id = ?");
+      patientStmt = db.prepare(
+        "SELECT * FROM patients WHERE smart_patient_id = ?",
+      );
     } else {
       // Search by Patient ID
       patientStmt = db.prepare("SELECT * FROM patients WHERE patient_id = ?");
@@ -984,7 +1005,13 @@ exports.logMedicalAccess = (req, res) => {
       ) VALUES (?, ?, ?, ?, ?)
     `);
 
-    stmt.run(patientId, doctorId || null, actionType, recordType, recordId || null);
+    stmt.run(
+      patientId,
+      doctorId || null,
+      actionType,
+      recordType,
+      recordId || null,
+    );
 
     res.json({
       success: true,
