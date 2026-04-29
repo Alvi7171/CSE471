@@ -7,4 +7,12 @@ export default defineConfig({
     port: 3000,
     open: true,
   },
+  preview: {
+    host: "0.0.0.0",
+    port: Number(process.env.PORT) || 4173,
+    allowedHosts: [
+      "illustrious-delight-production.up.railway.app",
+      process.env.RAILWAY_PUBLIC_DOMAIN,
+    ].filter(Boolean),
+  },
 });
