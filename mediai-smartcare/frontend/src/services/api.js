@@ -186,4 +186,80 @@ export const notificationAPI = {
   },
 };
 
+export const adminAPI = {
+  getInventorySummary: async () => {
+    const response = await api.get("/admin/inventory/summary");
+    return response.data;
+  },
+
+  getInventoryAlerts: async (expiryWindowDays = 30) => {
+    const response = await api.get("/admin/inventory/alerts", {
+      params: { expiryWindowDays },
+    });
+    return response.data;
+  },
+
+  listMedicines: async (search = "") => {
+    const response = await api.get("/admin/inventory/medicines", {
+      params: search ? { search } : {},
+    });
+    return response.data;
+  },
+
+  createMedicine: async (payload) => {
+    const response = await api.post("/admin/inventory/medicines", payload);
+    return response.data;
+  },
+
+  updateMedicine: async (medicineId, payload) => {
+    const response = await api.put(
+      `/admin/inventory/medicines/${medicineId}`,
+      payload,
+    );
+    return response.data;
+  },
+
+  adjustMedicineStock: async (medicineId, adjustment) => {
+    const response = await api.put(
+      `/admin/inventory/medicines/${medicineId}/stock`,
+      { adjustment },
+    );
+    return response.data;
+  },
+
+  deleteMedicine: async (medicineId) => {
+    const response = await api.delete(
+      `/admin/inventory/medicines/${medicineId}`,
+    );
+    return response.data;
+  },
+
+  getBedSummary: async () => {
+    const response = await api.get("/admin/beds/summary");
+    return response.data;
+  },
+
+  listBeds: async (filters = {}) => {
+    const response = await api.get("/admin/beds", { params: filters });
+    return response.data;
+  },
+
+  suggestBed: async (payload) => {
+    const response = await api.post("/admin/beds/suggest", payload);
+    return response.data;
+  },
+
+  allocateBed: async (payload) => {
+    const response = await api.post("/admin/beds/allocate", payload);
+    return response.data;
+  },
+
+  releaseBed: async (allocationId) => {
+    const response = await api.put(
+      `/admin/beds/allocations/${allocationId}/release`,
+    );
+    return response.data;
+  },
+};
+
 export default api;

@@ -15,29 +15,31 @@ const normalizeSqlForSqlite = (sql) =>
       (_, days) => `datetime('now', '-${days} days')`,
     )
     .replace(/\bNOW\(\)/gi, "CURRENT_TIMESTAMP");
+
 const hasColumn = async (connection, tableName, columnName) => {
-  if (process.env.USE_SQLITE === 'true') {
+  if (process.env.USE_SQLITE === "true") {
     const rows = connection.prepare(`PRAGMA table_info(${tableName})`).all();
-    return rows.some(row => row.name === columnName);
-  } else {
-    const [rows] = await connection.execute(
-      `
-      SELECT COLUMN_NAME
-      FROM INFORMATION_SCHEMA.COLUMNS
-      WHERE TABLE_SCHEMA = DATABASE()
-        AND TABLE_NAME = ?
-        AND COLUMN_NAME = ?
-      LIMIT 1
-      `,
-      [tableName, columnName],
-    );
-    return rows.length > 0;
+    return rows.some((row) => row.name === columnName);
   }
+
+  const [rows] = await connection.execute(
+    `
+    SELECT COLUMN_NAME
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = ?
+      AND COLUMN_NAME = ?
+    LIMIT 1
+    `,
+    [tableName, columnName],
+  );
+
+  return rows.length > 0;
 };
 
 const safeExec = async (connection, sql) => {
   try {
-    if (process.env.USE_SQLITE === 'true') {
+    if (process.env.USE_SQLITE === "true") {
       connection.exec(sql);
     } else {
       await connection.query(sql);
@@ -60,7 +62,8 @@ const safeExec = async (connection, sql) => {
 };
 
 const run = async () => {
-  const connection = process.env.USE_SQLITE === 'true' ? db : await db.getConnection();
+  const connection =
+    process.env.USE_SQLITE === "true" ? db : await db.getConnection();
 
   try {
     console.log("Initializing schema...");
@@ -68,7 +71,7 @@ const run = async () => {
     const schemaPath = path.join(__dirname, "models", "schema.sql");
     let schemaSQL = fs.readFileSync(schemaPath, "utf8");
 
-    if (process.env.USE_SQLITE === 'true') {
+    if (process.env.USE_SQLITE === "true") {
       schemaSQL = normalizeSqlForSqlite(schemaSQL);
     }
 
@@ -78,7 +81,7 @@ const run = async () => {
       .filter((stmt) => stmt.length > 0);
 
     for (const statement of statements) {
-      if (process.env.USE_SQLITE === 'true') {
+      if (process.env.USE_SQLITE === "true") {
         connection.exec(statement);
       } else {
         await connection.query(statement);
@@ -86,7 +89,7 @@ const run = async () => {
     }
 
     // Railway-safe incremental migration for already-created tables.
-    if (process.env.USE_SQLITE !== 'true') {
+    if (process.env.USE_SQLITE !== "true") {
       await safeExec(
         connection,
         "ALTER TABLE users MODIFY email VARCHAR(120) NULL",
@@ -108,7 +111,7 @@ const run = async () => {
       );
     }
 
-    if (process.env.USE_SQLITE !== 'true') {
+    if (process.env.USE_SQLITE !== "true") {
       await safeExec(
         connection,
         "ALTER TABLE doctors MODIFY email VARCHAR(100) NULL",
@@ -127,7 +130,7 @@ const run = async () => {
       );
     }
 
-    if (process.env.USE_SQLITE !== 'true') {
+    if (process.env.USE_SQLITE !== "true") {
       await safeExec(
         connection,
         "ALTER TABLE appointments MODIFY status ENUM('pending', 'confirmed', 'declined', 'cancelled', 'completed') DEFAULT 'pending'",
@@ -149,6 +152,45 @@ const run = async () => {
     }
 
     console.log("Schema migration complete");
+
+    // Initialize Billing & Roster schema
+    const billingRosterSchemaPath = path.join(
+      __dirname,
+      "models",
+      "billingAndRosterSchema.sql",
+    );
+
+    if (fs.existsSync(billingRosterSchemaPath)) {
+      let billingRosterSQL = fs.readFileSync(billingRosterSchemaPath, "utf8");
+
+      if (process.env.USE_SQLITE === "true") {
+        billingRosterSQL = normalizeSqlForSqlite(billingRosterSQL);
+      }
+
+      const billingStatements = billingRosterSQL
+        .split(";")
+        .map((stmt) => stmt.trim())
+        .filter((stmt) => stmt.length > 0);
+
+      for (const statement of billingStatements) {
+        try {
+          if (process.env.USE_SQLITE === "true") {
+            connection.exec(statement);
+          } else {
+            await connection.query(statement);
+          }
+        } catch (error) {
+          if (!String(error.message).includes("already exists")) {
+            console.error(
+              "Error executing billing/roster schema statement:",
+              error.message,
+            );
+          }
+        }
+      }
+
+      console.log("Billing & Roster schema initialized successfully");
+    }
 
     const defaultUsers = [
       {
@@ -217,7 +259,7 @@ const run = async () => {
         department: "Cardiology",
         qualification: "MBBS, MD Cardiology",
         experience_years: 12,
-        consultation_fee: 1500.00,
+        consultation_fee: 1500.0,
         is_available: 1,
       },
       {
@@ -229,7 +271,7 @@ const run = async () => {
         department: "Neurology",
         qualification: "MBBS, MD Neurology",
         experience_years: 8,
-        consultation_fee: 1200.00,
+        consultation_fee: 1200.0,
         is_available: 1,
       },
       {
@@ -241,7 +283,7 @@ const run = async () => {
         department: "Pediatrics",
         qualification: "MBBS, MD Pediatrics",
         experience_years: 10,
-        consultation_fee: 1000.00,
+        consultation_fee: 1000.0,
         is_available: 1,
       },
       {
@@ -253,7 +295,7 @@ const run = async () => {
         department: "Orthopedics",
         qualification: "MBBS, MS Orthopedics",
         experience_years: 15,
-        consultation_fee: 1800.00,
+        consultation_fee: 1800.0,
         is_available: 1,
       },
     ];
@@ -289,137 +331,12 @@ const run = async () => {
       );
     }
 
-    // Seed appointments
-    const defaultAppointments = [
-      {
-        doctor_id: 1,
-        patient_name: "John Smith",
-        patient_age: 45,
-        patient_gender: "Male",
-        patient_phone: "+8801855555555",
-        patient_email: "john.smith@email.com",
-        appointment_date: "2024-04-15",
-        appointment_time: "10:00:00",
-        status: "completed",
-        symptoms: "Chest pain and shortness of breath",
-      },
-      {
-        doctor_id: 1,
-        patient_name: "Mary Johnson",
-        patient_age: 32,
-        patient_gender: "Female",
-        patient_phone: "+8801866666666",
-        patient_email: "mary.johnson@email.com",
-        appointment_date: "2024-04-16",
-        appointment_time: "14:30:00",
-        status: "completed",
-        symptoms: "Irregular heartbeat",
-      },
-      {
-        doctor_id: 2,
-        patient_name: "David Brown",
-        patient_age: 28,
-        patient_gender: "Male",
-        patient_phone: "+8801877777777",
-        patient_email: "david.brown@email.com",
-        appointment_date: "2024-04-17",
-        appointment_time: "11:00:00",
-        status: "completed",
-        symptoms: "Severe headaches and dizziness",
-      },
-      {
-        doctor_id: 3,
-        patient_name: "Lisa Anderson",
-        patient_age: 6,
-        patient_gender: "Female",
-        patient_phone: " +8801888888888",
-        patient_email: "lisa.anderson@email.com",
-        appointment_date: "2024-04-18",
-        appointment_time: "09:00:00",
-        status: "completed",
-        symptoms: "Fever and cough",
-      },
-      {
-        doctor_id: 4,
-        patient_name: "James Wilson",
-        patient_age: 55,
-        patient_gender: "Male",
-        patient_phone: "+8801899999999",
-        patient_email: "james.wilson@email.com",
-        appointment_date: "2024-04-19",
-        appointment_time: "15:00:00",
-        status: "completed",
-        symptoms: "Knee pain and difficulty walking",
-      },
-      {
-        doctor_id: 1,
-        patient_name: "Anna Garcia",
-        patient_age: 38,
-        patient_gender: "Female",
-        patient_phone: "+8801811111111",
-        patient_email: "anna.garcia@email.com",
-        appointment_date: "2024-04-20",
-        appointment_time: "13:00:00",
-        status: "completed",
-        symptoms: "High blood pressure",
-      },
-      {
-        doctor_id: 2,
-        patient_name: "Robert Lee",
-        patient_age: 42,
-        patient_gender: "Male",
-        patient_phone: "+8801822222222",
-        patient_email: "robert.lee@email.com",
-        appointment_date: "2024-04-21",
-        appointment_time: "10:30:00",
-        status: "completed",
-        symptoms: "Memory loss and confusion",
-      },
-      {
-        doctor_id: 3,
-        patient_name: "Emma Taylor",
-        patient_age: 8,
-        patient_gender: "Female",
-        patient_phone: "+8801833333333",
-        patient_email: "emma.taylor@email.com",
-        appointment_date: "2024-04-22",
-        appointment_time: "11:30:00",
-        status: "completed",
-        symptoms: "Ear infection",
-      },
-    ];
 
-    for (const appointment of defaultAppointments) {
-      // Check if appointment already exists (by date, time, doctor)
-      const [existsRows] = await connection.execute(
-        "SELECT appointment_id FROM appointments WHERE doctor_id = ? AND appointment_date = ? AND appointment_time = ? LIMIT 1",
-        [appointment.doctor_id, appointment.appointment_date, appointment.appointment_time],
-      );
-
-      if (existsRows.length > 0) {
-        continue;
-      }
-
-      await connection.execute(
-        `
-        INSERT INTO appointments
-        (doctor_id, patient_name, patient_age, patient_gender, patient_phone, patient_email, appointment_date, appointment_time, status, symptoms)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `,
-        [
-          appointment.doctor_id,
-          appointment.patient_name,
-          appointment.patient_age,
-          appointment.patient_gender,
-          appointment.patient_phone,
-          appointment.patient_email,
-          appointment.appointment_date,
-          appointment.appointment_time,
-          appointment.status,
-          appointment.symptoms,
-        ],
-      );
-    }
+    // Legacy appointment seed intentionally skipped.
+    // Current schema requires schedule_id for appointments.
+    console.log(
+      "Skipping legacy appointment seed data (requires explicit schedule_id)",
+    );
 
     await connection.execute(
       `
@@ -439,7 +356,9 @@ const run = async () => {
     console.error("Database initialization failed:", error.message);
     process.exit(1);
   } finally {
-    connection.release();
+    if (typeof connection.release === "function") {
+      connection.release();
+    }
   }
 };
 

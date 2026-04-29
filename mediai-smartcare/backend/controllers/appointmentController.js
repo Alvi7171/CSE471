@@ -357,57 +357,99 @@ exports.bookAppointment = async (req, res) => {
 
     const [existingRows] = await connection.execute(
       `
-      SELECT appointment_id
+      SELECT appointment_id, status
       FROM appointments
       WHERE schedule_id = ?
         AND appointment_date = ?
         AND appointment_time = ?
-        AND status IN ('pending', 'confirmed', 'completed')
       LIMIT 1
       FOR UPDATE
       `,
       [scheduleId, appointmentDate, appointmentTime],
     );
 
-    if (existingRows.length > 0) {
-      await connection.rollback();
-      return res.status(409).json({
-        success: false,
-        message: "This time slot is already booked",
-      });
-    }
+    let appointmentId;
 
-    const [insertResult] = await connection.execute(
-      `
-      INSERT INTO appointments (
-        schedule_id,
-        doctor_id,
-        patient_user_id,
-        patient_name,
-        patient_age,
-        patient_gender,
-        patient_phone,
-        patient_email,
-        symptoms,
-        appointment_date,
-        appointment_time,
-        status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
-      `,
-      [
-        scheduleId,
-        doctorId,
-        req.user.userId,
-        patientName,
-        Number(patientAge),
-        patientGender || null,
-        patientPhone,
-        patientEmail || null,
-        symptoms || "No symptoms provided",
-        appointmentDate,
-        appointmentTime,
-      ],
-    );
+    if (existingRows.length > 0) {
+      const existingAppointment = existingRows[0];
+      const existingStatus = String(
+        existingAppointment.status || "",
+      ).toLowerCase();
+      const blockedStatuses = ["pending", "confirmed", "completed"];
+
+      if (blockedStatuses.includes(existingStatus)) {
+        await connection.rollback();
+        return res.status(409).json({
+          success: false,
+          message: "This time slot is already booked",
+        });
+      }
+
+      await connection.execute(
+        `
+        UPDATE appointments
+        SET doctor_id = ?,
+            patient_user_id = ?,
+            patient_name = ?,
+            patient_age = ?,
+            patient_gender = ?,
+            patient_phone = ?,
+            patient_email = ?,
+            symptoms = ?,
+            status = 'pending',
+            notes = NULL,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE appointment_id = ?
+        `,
+        [
+          doctorId,
+          req.user.userId,
+          patientName,
+          Number(patientAge),
+          patientGender || null,
+          patientPhone,
+          patientEmail || null,
+          symptoms || "No symptoms provided",
+          existingAppointment.appointment_id,
+        ],
+      );
+
+      appointmentId = existingAppointment.appointment_id;
+    } else {
+      const [insertResult] = await connection.execute(
+        `
+        INSERT INTO appointments (
+          schedule_id,
+          doctor_id,
+          patient_user_id,
+          patient_name,
+          patient_age,
+          patient_gender,
+          patient_phone,
+          patient_email,
+          symptoms,
+          appointment_date,
+          appointment_time,
+          status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+        `,
+        [
+          scheduleId,
+          doctorId,
+          req.user.userId,
+          patientName,
+          Number(patientAge),
+          patientGender || null,
+          patientPhone,
+          patientEmail || null,
+          symptoms || "No symptoms provided",
+          appointmentDate,
+          appointmentTime,
+        ],
+      );
+
+      appointmentId = insertResult.insertId;
+    }
 
     await connection.commit();
 
@@ -423,11 +465,11 @@ exports.bookAppointment = async (req, res) => {
       WHERE a.appointment_id = ?
       LIMIT 1
       `,
-      [insertResult.insertId],
+      [appointmentId],
     );
 
     const notificationWarning = await notifyAppointmentEvent(
-      insertResult.insertId,
+      appointmentId,
       "confirmation",
     );
 
@@ -439,6 +481,20 @@ exports.bookAppointment = async (req, res) => {
     });
   } catch (error) {
     await connection.rollback();
+
+    const duplicateSlotError =
+      error?.code === "ER_DUP_ENTRY" ||
+      error?.code === "SQLITE_CONSTRAINT_UNIQUE" ||
+      String(error?.message || "").includes("UNIQUE constraint failed") ||
+      String(error?.message || "").includes("Duplicate entry");
+
+    if (duplicateSlotError) {
+      return res.status(409).json({
+        success: false,
+        message: "This time slot is already booked",
+      });
+    }
+
     return res.status(500).json({
       success: false,
       message: "Failed to book appointment",

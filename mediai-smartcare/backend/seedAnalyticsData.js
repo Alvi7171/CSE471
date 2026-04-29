@@ -249,8 +249,10 @@ const seedAnalyticsData = async () => {
         const appointmentDate = new Date(
           today.getTime() - Math.random() * 30 * 24 * 60 * 60 * 1000,
         );
-        const doctorId = doctorIds[Math.floor(Math.random() * doctorIds.length)];
-        const scheduleId = scheduleIds[Math.floor(Math.random() * scheduleIds.length)];
+        const doctorId =
+          doctorIds[Math.floor(Math.random() * doctorIds.length)];
+        const scheduleId =
+          scheduleIds[Math.floor(Math.random() * scheduleIds.length)];
 
         const stmt = db.prepare(`
           INSERT INTO appointments (

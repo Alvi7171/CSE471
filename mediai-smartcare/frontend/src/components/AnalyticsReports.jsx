@@ -5,8 +5,8 @@
  *          department performance, doctor workload, and revenue statistics
  */
 
-import React, { useState, useEffect } from "react";
 import axios from "axios";
+import { useEffect, useState } from "react";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:1355/api";
 
@@ -16,7 +16,7 @@ function AnalyticsReports() {
   const [error, setError] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
-  
+
   // Patient search states
   const [patientSearchQuery, setPatientSearchQuery] = useState("");
   const [patientSearchResults, setPatientSearchResults] = useState([]);
@@ -56,7 +56,7 @@ function AnalyticsReports() {
       console.error("Error fetching analytics:", err);
       setError(
         err.response?.data?.error ||
-          "Failed to fetch analytics data. Please try again."
+        "Failed to fetch analytics data. Please try again."
       );
     } finally {
       setLoading(false);
@@ -206,7 +206,7 @@ function AnalyticsReports() {
             onChange={(e) => handlePatientSearch(e.target.value)}
             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
-          
+
           {/* Search Results Dropdown */}
           {patientSearchResults.length > 0 && (
             <div className="absolute top-full left-0 right-0 bg-white border-2 border-blue-400 rounded-lg shadow-2xl mt-1 z-[9999] max-h-80 overflow-y-auto">
@@ -231,7 +231,7 @@ function AnalyticsReports() {
 
       {/* Selected Patient Medical Timeline */}
       {selectedPatient && patientAnalytics && (
-        <PatientTimelineView 
+        <PatientTimelineView
           patient={patientAnalytics.patient}
           timeline={patientAnalytics.appointmentHistory}
           contribution={patientAnalytics.analyticsContribution}
@@ -363,13 +363,12 @@ function OverviewView({ analytics }) {
                   <div
                     className="bg-green-500 h-2 rounded-full transition-all duration-300"
                     style={{
-                      width: `${
-                        (dept.total_visits /
+                      width: `${(dept.total_visits /
                           Math.max(
                             ...analytics.departments.map((d) => d.total_visits)
                           )) *
                         100
-                      }%`,
+                        }%`,
                     }}
                   />
                 </div>
@@ -727,9 +726,9 @@ function PatientsView({ patients }) {
             <p className="text-2xl font-bold text-blue-600">
               {patients.totalPatients > 0
                 ? (
-                    (patients.patientsWithVisits / patients.totalPatients) *
-                    100
-                  ).toFixed(1)
+                  (patients.patientsWithVisits / patients.totalPatients) *
+                  100
+                ).toFixed(1)
                 : 0}
               %
             </p>
@@ -945,11 +944,10 @@ function PatientTimelineView({ patient, timeline, contribution, onClose }) {
                         Specialization: {appointment.specialization}
                       </div>
                     </div>
-                    <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
-                      appointment.status === 'completed' ? 'bg-green-100 text-green-700' : 
-                      appointment.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
-                      'bg-red-100 text-red-700'
-                    }`}>
+                    <span className={`px-3 py-1 rounded-full text-sm font-semibold ${appointment.status === 'completed' ? 'bg-green-100 text-green-700' :
+                        appointment.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                          'bg-red-100 text-red-700'
+                      }`}>
                       {appointment.status.charAt(0).toUpperCase() + appointment.status.slice(1)}
                     </span>
                   </div>

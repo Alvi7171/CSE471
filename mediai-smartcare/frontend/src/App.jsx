@@ -1,15 +1,17 @@
-import React, { useEffect, useMemo, useState } from "react";
-import SymptomChecker from "./components/SymptomChecker";
-import DoctorSchedule from "./components/DoctorSchedule";
-import PatientBooking from "./components/PatientBooking";
-import PatientTimeline from "./components/PatientTimeline";
-import { authAPI } from "./services/api";
-import PatientRegistration from "./components/PatientRegistration";
+import { useEffect, useMemo, useState } from "react";
 import AnalyticsReports from "./components/AnalyticsReports";
+import DoctorSchedule from "./components/DoctorSchedule";
 import NotificationCenter from "./components/NotificationCenter";
+import PatientBooking from "./components/PatientBooking";
+import PatientRegistration from "./components/PatientRegistration";
+import PatientTimeline from "./components/PatientTimeline";
+import SymptomChecker from "./components/SymptomChecker";
 import LabTestManagement from "./components/LabTestManagement";
 import EmergencyResponse from "./components/EmergencyResponse";
+import InventoryManagement from "./components/InventoryManagement";
+import BedAllocationDashboard from "./components/BedAllocationDashboard";
 import "./index.css";
+import { authAPI } from "./services/api";
 
 const DEPARTMENTS = [
   "Cardiology",
@@ -35,12 +37,21 @@ const roleTabs = {
     { key: "booking", label: "Book Appointment" },
     { key: "timeline", label: "Patient Records" },
   ],
-  doctor: [{ key: "schedule", label: "Doctor Schedule" }],
+  doctor: [
+    { key: "schedule", label: "Doctor Schedule" },
+    { key: "labtests", label: "Lab Tests" },
+    { key: "emergency", label: "Emergency Response" },
+  ],
   admin: [
     { key: "schedule", label: "Doctor Schedule" },
+    { key: "beds", label: "AI Bed Allocation" },
+    { key: "inventory", label: "Inventory & Medicines" },
     { key: "registration", label: "Patient Registration" },
     { key: "analytics", label: "Analytics Dashboard" },
-    { key: "admin", label: "Admin Console" },
+    { key: "billing", label: "Billing & Payments" },
+    { key: "roster", label: "Staff Roster" },
+    { key: "labtests", label: "Lab Test Management" },
+    { key: "emergency", label: "Emergency Response" },
   ],
 };
 
@@ -118,23 +129,23 @@ function App() {
       const payload =
         authMode === "register"
           ? {
-              fullName: authForm.fullName,
-              password: authForm.password,
-              role: selectedRegisterRole,
-              email: authForm.email,
-              phone: authForm.phone,
-              degree: authForm.degree,
-              department: authForm.department,
-              experienceYears: authForm.experienceYears,
-              medicalName: authForm.medicalName,
-              address: authForm.address,
-              age: authForm.age,
-              gender: authForm.gender,
-            }
+            fullName: authForm.fullName,
+            password: authForm.password,
+            role: selectedRegisterRole,
+            email: authForm.email,
+            phone: authForm.phone,
+            degree: authForm.degree,
+            department: authForm.department,
+            experienceYears: authForm.experienceYears,
+            medicalName: authForm.medicalName,
+            address: authForm.address,
+            age: authForm.age,
+            gender: authForm.gender,
+          }
           : {
-              identifier: authForm.email,
-              password: authForm.password,
-            };
+            identifier: authForm.email,
+            password: authForm.password,
+          };
 
       const response =
         authMode === "register"
@@ -366,11 +377,10 @@ function App() {
 
           <div className="flex rounded-xl bg-theme-soft p-1 mb-5">
             <button
-              className={`flex-1 py-2 rounded-lg text-sm font-semibold ${
-                authMode === "login"
-                  ? "bg-white text-theme-primary shadow"
-                  : "text-gray-600"
-              }`}
+              className={`flex-1 py-2 rounded-lg text-sm font-semibold ${authMode === "login"
+                ? "bg-white text-theme-primary shadow"
+                : "text-gray-600"
+                }`}
               onClick={() => {
                 setAuthMode("login");
                 setAuthError("");
@@ -379,11 +389,10 @@ function App() {
               Login
             </button>
             <button
-              className={`flex-1 py-2 rounded-lg text-sm font-semibold ${
-                authMode === "register"
-                  ? "bg-white text-theme-primary shadow"
-                  : "text-gray-600"
-              }`}
+              className={`flex-1 py-2 rounded-lg text-sm font-semibold ${authMode === "register"
+                ? "bg-white text-theme-primary shadow"
+                : "text-gray-600"
+                }`}
               onClick={() => {
                 setAuthMode("register");
                 setAuthError("");
@@ -400,11 +409,10 @@ function App() {
                   key={item.key}
                   type="button"
                   onClick={() => setSelectedRegisterRole(item.key)}
-                  className={`border rounded-xl p-3 text-center transition ${
-                    selectedRegisterRole === item.key
-                      ? "border-theme-primary bg-theme-soft"
-                      : "border-gray-200 bg-white"
-                  }`}
+                  className={`border rounded-xl p-3 text-center transition ${selectedRegisterRole === item.key
+                    ? "border-theme-primary bg-theme-soft"
+                    : "border-gray-200 bg-white"
+                    }`}
                 >
                   <div className="text-2xl mb-1">{item.icon}</div>
                   <div className="font-semibold text-sm">{item.label}</div>
@@ -475,11 +483,10 @@ function App() {
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
-                className={`w-full text-left px-4 py-3 rounded-xl transition-all duration-200 ${
-                  activeTab === tab.key
-                    ? "bg-white/15 border-l-4 border-theme-accent"
-                    : "hover:bg-white/10"
-                }`}
+                className={`w-full text-left px-4 py-3 rounded-xl transition-all duration-200 ${activeTab === tab.key
+                  ? "bg-white/15 border-l-4 border-theme-accent"
+                  : "hover:bg-white/10"
+                  }`}
               >
                 {tab.label}
               </button>
@@ -540,28 +547,26 @@ function App() {
             {activeTab === "registration" && user.role === "admin" && (
               <PatientRegistration />
             )}
+            {(activeTab === "labtests") && (
+              <LabTestManagement />
+            )}
+            {(activeTab === "emergency") && (
+              <EmergencyResponse />
+            )}
           </main>
 
           {activeTab === "analytics" && user.role === "admin" && (
             <AnalyticsReports />
           )}
 
-          {activeTab === "admin" && user.role === "admin" && (
-            <div className="bg-white/85 backdrop-blur-md border border-white/70 rounded-2xl p-8 shadow-sm">
-              <h3 className="text-2xl font-semibold text-theme-primary mb-3">
-                Admin Console
-              </h3>
-              <p className="text-gray-700 mb-4">
-                Admin area is ready. You can add user management, reports, and
-                operational tools next.
-              </p>
-              <ul className="text-gray-700 space-y-2 list-disc pl-5">
-                <li>Manage doctors and role assignments</li>
-                <li>Review appointment analytics</li>
-                <li>Configure hospital-level settings</li>
-              </ul>
-            </div>
+          {activeTab === "inventory" && user.role === "admin" && (
+            <InventoryManagement />
           )}
+
+          {activeTab === "beds" && user.role === "admin" && (
+            <BedAllocationDashboard />
+          )}
+
         </section>
       </div>
     </div>

@@ -15,7 +15,7 @@ const { db } = require("../config/database");
 const getTotalPatientVisits = (startDate, endDate) => {
   try {
     let query =
-      "SELECT COUNT(*) as total_visits FROM appointments WHERE status = 'completed'";
+      "SELECT COUNT(*) as total_visits, COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_visits, COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_visits FROM appointments WHERE 1=1";
     const params = [];
 
     if (startDate && endDate) {
@@ -28,7 +28,7 @@ const getTotalPatientVisits = (startDate, endDate) => {
 
     // Get visits by day for trend analysis
     let trendQuery =
-      "SELECT DATE(appointment_date) as visit_day, COUNT(*) as visits FROM appointments WHERE status = 'completed'";
+      "SELECT DATE(appointment_date) as visit_day, COUNT(*) as total_visits, COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_visits FROM appointments WHERE 1=1";
     const trendParams = [];
 
     if (startDate && endDate) {
@@ -42,6 +42,8 @@ const getTotalPatientVisits = (startDate, endDate) => {
 
     return {
       totalVisits: result.total_visits || 0,
+      completedVisits: result.completed_visits || 0,
+      pendingVisits: result.pending_visits || 0,
       trend: trendData || [],
     };
   } catch (error) {
@@ -52,7 +54,7 @@ const getTotalPatientVisits = (startDate, endDate) => {
 
 /**
  * Get department performance metrics
- * Shows: active doctors per department, total visits, average consultation fee
+ * Shows: active doctors per department, total visits, revenue, average consultation fee
  */
 const getDepartmentPerformance = (startDate, endDate) => {
   try {
@@ -60,23 +62,24 @@ const getDepartmentPerformance = (startDate, endDate) => {
       SELECT 
         d.department,
         COUNT(DISTINCT d.doctor_id) as total_doctors,
-        COUNT(DISTINCT a.appointment_id) as total_visits,
-        ROUND(AVG(d.consultation_fee), 2) as avg_consultation_fee,
-        ROUND(SUM(d.consultation_fee), 2) as department_revenue,
-        COUNT(CASE WHEN d.is_available = 1 THEN 1 END) as available_doctors
+        COUNT(DISTINCT CASE WHEN d.is_available = 1 THEN d.doctor_id END) as available_doctors,
+        COUNT(DISTINCT a.appointment_id) as total_appointments,
+        COUNT(DISTINCT CASE WHEN a.status = 'completed' THEN a.appointment_id END) as completed_appointments,
+        ROUND(SUM(CASE WHEN a.status NOT IN ('cancelled', 'declined') THEN d.consultation_fee ELSE 0 END), 2) as department_revenue,
+        ROUND(AVG(CASE WHEN a.status NOT IN ('cancelled', 'declined') THEN d.consultation_fee ELSE NULL END), 2) as avg_consultation_fee
       FROM doctors d
-      LEFT JOIN appointments a ON d.doctor_id = a.doctor_id AND a.status = 'completed'
+      LEFT JOIN appointments a ON d.doctor_id = a.doctor_id
     `;
 
     const params = [];
 
     if (startDate && endDate) {
       query +=
-        " AND DATE(a.appointment_date) >= ? AND DATE(a.appointment_date) <= ?";
+        " WHERE DATE(a.appointment_date) >= ? AND DATE(a.appointment_date) <= ?";
       params.push(startDate, endDate);
     }
 
-    query += " GROUP BY d.department ORDER BY total_visits DESC";
+    query += " GROUP BY d.department ORDER BY department_revenue DESC";
 
     const result = db.prepare(query).all(...params);
     return result || [];
@@ -88,7 +91,7 @@ const getDepartmentPerformance = (startDate, endDate) => {
 
 /**
  * Get doctor workload metrics
- * Shows: number of visits per doctor, patient load, average consultation fee
+ * Shows: number of visits per doctor, patient load, average consultation fee, revenue
  */
 const getDoctorWorkload = (startDate, endDate) => {
   try {
@@ -98,25 +101,28 @@ const getDoctorWorkload = (startDate, endDate) => {
         d.name,
         d.department,
         d.specialization,
-        COUNT(DISTINCT a.appointment_id) as total_visits,
+        COUNT(DISTINCT a.appointment_id) as total_appointments,
+        COUNT(DISTINCT CASE WHEN a.status = 'completed' THEN a.appointment_id END) as completed_appointments,
         COUNT(DISTINCT a.patient_user_id) as unique_patients,
-        ROUND(AVG(d.consultation_fee), 2) as avg_fee,
-        ROUND(d.consultation_fee * COUNT(DISTINCT a.appointment_id), 2) as doctor_revenue,
+        d.consultation_fee as fee_per_appointment,
+        ROUND(SUM(CASE WHEN a.status NOT IN ('cancelled', 'declined') THEN d.consultation_fee ELSE 0 END), 2) as doctor_revenue,
+        ROUND(AVG(CASE WHEN a.status NOT IN ('cancelled', 'declined') THEN d.consultation_fee ELSE NULL END), 2) as avg_fee,
         d.is_available,
         d.experience_years
       FROM doctors d
-      LEFT JOIN appointments a ON d.doctor_id = a.doctor_id AND a.status = 'completed'
+      LEFT JOIN appointments a ON d.doctor_id = a.doctor_id
     `;
 
     const params = [];
 
     if (startDate && endDate) {
       query +=
-        " AND DATE(a.appointment_date) >= ? AND DATE(a.appointment_date) <= ?";
+        " WHERE DATE(a.appointment_date) >= ? AND DATE(a.appointment_date) <= ?";
       params.push(startDate, endDate);
     }
 
-    query += " GROUP BY d.doctor_id, d.name ORDER BY total_visits DESC";
+    query +=
+      " GROUP BY d.doctor_id, d.name ORDER BY completed_appointments DESC";
 
     const result = db.prepare(query).all(...params);
     return result || [];
@@ -132,14 +138,16 @@ const getDoctorWorkload = (startDate, endDate) => {
  */
 const getRevenueStatistics = (startDate, endDate) => {
   try {
-    // Total revenue
+    // Total revenue - Count all non-cancelled/declined appointments
     let totalQuery = `
       SELECT 
-        ROUND(SUM(d.consultation_fee), 2) as total_revenue,
-        COUNT(DISTINCT a.appointment_id) as paid_visits
+        COUNT(DISTINCT a.appointment_id) as total_appointments,
+        COUNT(DISTINCT CASE WHEN a.status = 'completed' THEN a.appointment_id END) as completed_visits,
+        ROUND(SUM(CASE WHEN a.status NOT IN ('cancelled', 'declined') THEN d.consultation_fee ELSE 0 END), 2) as total_revenue,
+        ROUND(AVG(CASE WHEN a.status NOT IN ('cancelled', 'declined') THEN d.consultation_fee ELSE NULL END), 2) as avg_revenue_per_visit
       FROM appointments a
       JOIN doctors d ON a.doctor_id = d.doctor_id
-      WHERE a.status = 'completed'
+      WHERE 1=1
     `;
 
     const totalParams = [];
@@ -152,15 +160,17 @@ const getRevenueStatistics = (startDate, endDate) => {
 
     const totalRevenue = db.prepare(totalQuery).get(...totalParams);
 
-    // Revenue by department
+    // Revenue by department - Count all non-cancelled/declined appointments
     let deptQuery = `
       SELECT 
         d.department,
-        ROUND(SUM(d.consultation_fee), 2) as department_revenue,
-        COUNT(DISTINCT a.appointment_id) as visit_count
+        COUNT(DISTINCT a.appointment_id) as total_appointments,
+        COUNT(DISTINCT CASE WHEN a.status = 'completed' THEN a.appointment_id END) as completed_visits,
+        ROUND(SUM(CASE WHEN a.status NOT IN ('cancelled', 'declined') THEN d.consultation_fee ELSE 0 END), 2) as department_revenue,
+        ROUND(AVG(CASE WHEN a.status NOT IN ('cancelled', 'declined') THEN d.consultation_fee ELSE NULL END), 2) as avg_fee
       FROM appointments a
       JOIN doctors d ON a.doctor_id = d.doctor_id
-      WHERE a.status = 'completed'
+      WHERE 1=1
     `;
 
     const deptParams = [];
@@ -175,15 +185,17 @@ const getRevenueStatistics = (startDate, endDate) => {
 
     const departmentRevenue = db.prepare(deptQuery).all(...deptParams);
 
-    // Revenue trend (daily)
+    // Revenue trend (daily) - Count all non-cancelled/declined appointments per day
     let trendQuery = `
       SELECT 
         DATE(a.appointment_date) as revenue_date,
-        ROUND(SUM(d.consultation_fee), 2) as daily_revenue,
-        COUNT(DISTINCT a.appointment_id) as visits
+        COUNT(DISTINCT a.appointment_id) as total_visits,
+        COUNT(DISTINCT CASE WHEN a.status = 'completed' THEN a.appointment_id END) as completed_visits,
+        ROUND(SUM(CASE WHEN a.status NOT IN ('cancelled', 'declined') THEN d.consultation_fee ELSE 0 END), 2) as daily_revenue,
+        ROUND(AVG(CASE WHEN a.status NOT IN ('cancelled', 'declined') THEN d.consultation_fee ELSE NULL END), 2) as avg_daily_fee
       FROM appointments a
       JOIN doctors d ON a.doctor_id = d.doctor_id
-      WHERE a.status = 'completed'
+      WHERE 1=1
     `;
 
     const trendParams = [];
@@ -234,22 +246,36 @@ const getPatientStatistics = (startDate, endDate) => {
 
     const newPatients = db.prepare(newPatientsQuery).get(...newParams);
 
-    // Patients with appointments
-    const patientsWithAppointmentsQuery =
-      "SELECT COUNT(DISTINCT patient_user_id) as patients_with_appointments FROM appointments WHERE status = 'completed'";
-    const patientsWithAppointments = db
-      .prepare(patientsWithAppointmentsQuery)
-      .get();
+    // Patients with completed and pending appointments
+    const appointmentsStatsQuery = `
+      SELECT 
+        COUNT(DISTINCT patient_user_id) as patients_with_appointments,
+        COUNT(DISTINCT CASE WHEN status = 'completed' THEN patient_user_id END) as patients_with_completed,
+        COUNT(DISTINCT CASE WHEN status = 'pending' THEN patient_user_id END) as patients_with_pending
+      FROM appointments 
+      WHERE patient_user_id IS NOT NULL
+    `;
+    const appointmentsStats = db.prepare(appointmentsStatsQuery).get();
 
     // Average appointments per patient
-    const avgAppointmentsQuery =
-      "SELECT COUNT(*) as total_appointments, COUNT(DISTINCT patient_user_id) as total_patients, ROUND(COUNT(*) / NULLIF(COUNT(DISTINCT patient_user_id), 0), 2) as avg_appointments_per_patient FROM appointments WHERE status = 'completed'";
+    const avgAppointmentsQuery = `
+      SELECT 
+        COUNT(*) as total_appointments,
+        COUNT(DISTINCT patient_user_id) as total_patients,
+        ROUND(COUNT(*) / NULLIF(COUNT(DISTINCT patient_user_id), 0), 2) as avg_appointments_per_patient,
+        COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_appointments
+      FROM appointments 
+      WHERE patient_user_id IS NOT NULL
+    `;
     const avgAppointments = db.prepare(avgAppointmentsQuery).get();
 
     // Gender distribution
     let genderQuery = `
       SELECT 
-        gender,
+        CASE 
+          WHEN gender IS NULL OR gender = '' THEN 'Not Specified'
+          ELSE gender
+        END as gender,
         COUNT(*) as count
       FROM users WHERE role = 'patient'
     `;
@@ -267,9 +293,13 @@ const getPatientStatistics = (startDate, endDate) => {
       totalPatients: totalPatients?.total_patients || 0,
       newPatients: newPatients?.new_patients || 0,
       patientsWithAppointments:
-        patientsWithAppointments?.patients_with_appointments || 0,
+        appointmentsStats?.patients_with_appointments || 0,
+      patientsWithCompleted: appointmentsStats?.patients_with_completed || 0,
+      patientsWithPending: appointmentsStats?.patients_with_pending || 0,
       avgAppointmentsPerPatient:
         avgAppointments?.avg_appointments_per_patient || 0,
+      totalAppointments: avgAppointments?.total_appointments || 0,
+      completedAppointments: avgAppointments?.completed_appointments || 0,
       genderDistribution: genderDistribution || [],
     };
   } catch (error) {
@@ -529,7 +559,8 @@ const getPatientAnalytics = (patientId) => {
         appointmentCount: stats.total_appointments || 0,
         doctorCount: doctorsVisited.length,
         registrationDate: patient.created_at,
-        lastAppointmentDate: appointments.length > 0 ? appointments[0].appointment_date : null,
+        lastAppointmentDate:
+          appointments.length > 0 ? appointments[0].appointment_date : null,
       },
     };
   } catch (error) {

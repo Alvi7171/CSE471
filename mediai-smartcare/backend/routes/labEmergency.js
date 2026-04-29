@@ -78,20 +78,11 @@ router.get("/stats", labEmergencyController.getLabStats);
 // ============================================
 
 /**
- * @route   POST /api/emergency
- * @desc    Create new emergency case
- * @body    { patientName, emergencyType, severity, triageCategory, ... }
+ * @route   GET /api/emergency/stats
+ * @desc    Get emergency statistics
  * @access  Public
  */
-router.post("/", labEmergencyController.createEmergencyCase);
-
-/**
- * @route   GET /api/emergency
- * @desc    Get all emergency cases (with filters)
- * @query   { status, severity, fromDate, toDate }
- * @access  Public
- */
-router.get("/", labEmergencyController.getEmergencyCases);
+router.get("/stats", labEmergencyController.getEmergencyStats);
 
 /**
  * @route   GET /api/emergency/active
@@ -99,13 +90,6 @@ router.get("/", labEmergencyController.getEmergencyCases);
  * @access  Public
  */
 router.get("/active", labEmergencyController.getActiveEmergencies);
-
-/**
- * @route   GET /api/emergency/stats
- * @desc    Get emergency statistics
- * @access  Public
- */
-router.get("/stats", labEmergencyController.getEmergencyStats);
 
 /**
  * @route   GET /api/emergency/alerts
@@ -121,6 +105,38 @@ router.get("/alerts", labEmergencyController.getEmergencyAlerts);
  * @access  Public
  */
 router.get("/:emergencyId", labEmergencyController.getEmergencyCaseById);
+
+/**
+ * @route   PUT /api/emergency/:emergencyId/status
+ * @desc    Update emergency case status
+ * @body    { status, treatmentGiven, outcome, notes }
+ * @access  Public
+ */
+router.put("/:emergencyId/status", labEmergencyController.updateEmergencyStatus);
+
+/**
+ * @route   PUT /api/emergency/:emergencyId/assign-doctor
+ * @desc    Assign doctor to emergency case
+ * @body    { doctorId }
+ * @access  Public
+ */
+router.put("/:emergencyId/assign-doctor", labEmergencyController.assignDoctorToEmergency);
+
+/**
+ * @route   POST /api/emergency
+ * @desc    Create new emergency case
+ * @body    { patientName, emergencyType, severity, triageCategory, ... }
+ * @access  Public
+ */
+router.post("/", labEmergencyController.createEmergencyCase);
+
+/**
+ * @route   GET /api/emergency
+ * @desc    Get all emergency cases (with filters)
+ * @query   { status, severity, fromDate, toDate }
+ * @access  Public
+ */
+router.get("/", labEmergencyController.getEmergencyCases);
 
 /**
  * @route   PUT /api/emergency/:emergencyId/status
