@@ -7,10 +7,31 @@ const express = require("express");
 const router = express.Router();
 const patientController = require("../controllers/patientController");
 
+const resolveHandler = (handlerName) => {
+  const handler = patientController[handlerName];
+
+  if (typeof handler === "function") {
+    return handler;
+  }
+
+  console.error(
+    `❌ Missing patient controller handler: ${handlerName}. Check controllers/patientController.js exports.`,
+  );
+
+  return (req, res) => {
+    res.status(500).json({
+      success: false,
+      message: `Route handler '${handlerName}' is not configured`,
+    });
+  };
+};
+
 // Patient routes
-router.get("/", patientController.getAllPatients);
-router.get("/phone/:phone/timeline", patientController.getPatientTimelineByPhone);
-router.get("/:phone/summary", patientController.getPatientSummary);
+router.get("/", resolveHandler("getAllPatients"));
+router.get(
+  "/phone/:phone/timeline",
+  resolveHandler("getPatientTimelineByPhone"),
+);
 
 // ============================================
 // PATIENT REGISTRATION ROUTES
@@ -28,7 +49,7 @@ router.get("/:phone/summary", patientController.getPatientSummary);
  * }
  * @access  Public
  */
-router.post("/register", patientController.registerPatient);
+router.post("/register", resolveHandler("registerPatient"));
 
 /**
  * @route   GET /api/patients/:phone/summary
@@ -36,7 +57,7 @@ router.post("/register", patientController.registerPatient);
  * @params  phone (patient phone number)
  * @access  Public
  */
-router.get("/:phone/summary", patientController.getPatientSummary);
+router.get("/:phone/summary", resolveHandler("getPatientSummary"));
 
 /**
  * @route   GET /api/patients/:patientId
@@ -44,7 +65,7 @@ router.get("/:phone/summary", patientController.getPatientSummary);
  * @params  patientId (Can be SPC-XXXXX or numeric ID)
  * @access  Public (should be protected in production)
  */
-router.get("/:patientId", patientController.getPatient);
+router.get("/:patientId", resolveHandler("getPatient"));
 
 /**
  * @route   PUT /api/patients/:patientId
@@ -53,7 +74,7 @@ router.get("/:patientId", patientController.getPatient);
  * @body    {fields to update}
  * @access  Public (should be protected in production)
  */
-router.put("/:patientId", patientController.updatePatient);
+router.put("/:patientId", resolveHandler("updatePatient"));
 
 // ============================================
 // MEDICAL VISITS ROUTES
@@ -70,7 +91,7 @@ router.put("/:patientId", patientController.updatePatient);
  * }
  * @access  Public (should be doctor-only in production)
  */
-router.post("/:patientId/visits", patientController.addMedicalVisit);
+router.post("/:patientId/visits", resolveHandler("addMedicalVisit"));
 
 /**
  * @route   GET /api/patients/:patientId/visits
@@ -78,7 +99,7 @@ router.post("/:patientId/visits", patientController.addMedicalVisit);
  * @params  patientId
  * @access  Public (should be protected in production)
  */
-router.get("/:patientId/visits", patientController.getPatientVisits);
+router.get("/:patientId/visits", resolveHandler("getPatientVisits"));
 
 // ============================================
 // DIAGNOSTIC REPORTS ROUTES
@@ -96,7 +117,7 @@ router.get("/:patientId/visits", patientController.getPatientVisits);
  * }
  * @access  Public (should be doctor-only in production)
  */
-router.post("/:patientId/reports", patientController.addDiagnosticReport);
+router.post("/:patientId/reports", resolveHandler("addDiagnosticReport"));
 
 /**
  * @route   GET /api/patients/:patientId/reports
@@ -104,7 +125,7 @@ router.post("/:patientId/reports", patientController.addDiagnosticReport);
  * @params  patientId
  * @access  Public (should be protected in production)
  */
-router.get("/:patientId/reports", patientController.getPatientReports);
+router.get("/:patientId/reports", resolveHandler("getPatientReports"));
 
 // ============================================
 // PRESCRIPTIONS ROUTES
@@ -121,7 +142,7 @@ router.get("/:patientId/reports", patientController.getPatientReports);
  * }
  * @access  Public (should be doctor-only in production)
  */
-router.post("/:patientId/prescriptions", patientController.addPrescription);
+router.post("/:patientId/prescriptions", resolveHandler("addPrescription"));
 
 /**
  * @route   GET /api/patients/:patientId/prescriptions
@@ -132,7 +153,7 @@ router.post("/:patientId/prescriptions", patientController.addPrescription);
  */
 router.get(
   "/:patientId/prescriptions",
-  patientController.getPatientPrescriptions,
+  resolveHandler("getPatientPrescriptions"),
 );
 
 // ============================================
@@ -151,7 +172,7 @@ router.get(
  * }
  * @access  Public (should be doctor-only in production)
  */
-router.post("/:patientId/timeline", patientController.addTreatmentTimeline);
+router.post("/:patientId/timeline", resolveHandler("addTreatmentTimeline"));
 
 /**
  * @route   GET /api/patients/:patientId/timeline
@@ -159,7 +180,7 @@ router.post("/:patientId/timeline", patientController.addTreatmentTimeline);
  * @params  patientId
  * @access  Public (should be protected in production)
  */
-router.get("/:patientId/timeline", patientController.getPatientTimeline);
+router.get("/:patientId/timeline", resolveHandler("getPatientTimeline"));
 
 // ============================================
 // ACCESS CONTROL ROUTES
@@ -172,7 +193,7 @@ router.get("/:patientId/timeline", patientController.getPatientTimeline);
  * @body    {doctorId, accessLevel (view/edit/full/limited), accessReason}
  * @access  Public (should be patient/admin-only in production)
  */
-router.post("/:patientId/access/grant", patientController.grantDoctorAccess);
+router.post("/:patientId/access/grant", resolveHandler("grantDoctorAccess"));
 
 /**
  * @route   GET /api/patients/:patientId/access
@@ -180,7 +201,7 @@ router.post("/:patientId/access/grant", patientController.grantDoctorAccess);
  * @params  patientId
  * @access  Public (should be patient/doctor-only in production)
  */
-router.get("/:patientId/access", patientController.getPatientAccessList);
+router.get("/:patientId/access", resolveHandler("getPatientAccessList"));
 
 /**
  * @route   DELETE /api/patients/:patientId/access/:doctorId
@@ -190,7 +211,7 @@ router.get("/:patientId/access", patientController.getPatientAccessList);
  */
 router.delete(
   "/:patientId/access/:doctorId",
-  patientController.revokeDoctorAccess,
+  resolveHandler("revokeDoctorAccess"),
 );
 
 // ============================================
@@ -205,7 +226,7 @@ router.delete(
  */
 router.get(
   "/:patientId/complete-history",
-  patientController.getCompleteMedicalHistory,
+  resolveHandler("getCompleteMedicalHistory"),
 );
 
 /**
@@ -215,6 +236,6 @@ router.get(
  * @body    {doctorId, actionType, recordType, recordId (optional)}
  * @access  Public (should be automatic in production)
  */
-router.post("/:patientId/audit-log", patientController.logMedicalAccess);
+router.post("/:patientId/audit-log", resolveHandler("logMedicalAccess"));
 
 module.exports = router;
