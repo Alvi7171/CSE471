@@ -179,6 +179,50 @@ initializePatientTables();
 // ============================================
 
 /**
+ * Get all patients
+ * GET /api/patients
+ */
+exports.getAllPatients = (req, res) => {
+  try {
+    const search = String(req.query.search || "").trim();
+
+    let rows;
+    if (search) {
+      const stmt = db.prepare(`
+        SELECT *
+        FROM patients
+        WHERE first_name LIKE ?
+           OR last_name LIKE ?
+           OR smart_patient_id LIKE ?
+           OR phone_number LIKE ?
+        ORDER BY registration_date DESC
+      `);
+      const pattern = `%${search}%`;
+      rows = stmt.all(pattern, pattern, pattern, pattern);
+    } else {
+      const stmt = db.prepare(`
+        SELECT *
+        FROM patients
+        ORDER BY registration_date DESC
+      `);
+      rows = stmt.all();
+    }
+
+    return res.json({
+      success: true,
+      count: rows.length,
+      patients: rows,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Error fetching patients",
+      error: error.message,
+    });
+  }
+};
+
+/**
  * Register a new patient
  * POST /api/patients/register
  */
@@ -789,6 +833,49 @@ exports.getPatientTimeline = (req, res) => {
     res.status(500).json({
       success: false,
       message: "Error fetching treatment timeline",
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * Get patient timeline by phone
+ * GET /api/patients/phone/:phone/timeline
+ */
+exports.getPatientTimelineByPhone = (req, res) => {
+  try {
+    const { phone } = req.params;
+
+    const patientStmt = db.prepare(
+      "SELECT patient_id, smart_patient_id, first_name, last_name, phone_number FROM patients WHERE phone_number = ?",
+    );
+    const patient = patientStmt.get(phone);
+
+    if (!patient) {
+      return res.status(404).json({
+        success: false,
+        message: "Patient not found with this phone number",
+      });
+    }
+
+    const timelineStmt = db.prepare(`
+      SELECT tt.*, d.name as doctor_name
+      FROM treatment_timeline tt
+      LEFT JOIN doctors d ON tt.doctor_id = d.doctor_id
+      WHERE tt.patient_id = ?
+      ORDER BY tt.treatment_date DESC
+    `);
+    const timeline = timelineStmt.all(patient.patient_id);
+
+    return res.json({
+      success: true,
+      patient,
+      timeline,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Error fetching patient timeline",
       error: error.message,
     });
   }
