@@ -14,7 +14,22 @@ const normalizeSqlForSqlite = (sql) =>
       /DATE_SUB\s*\(\s*NOW\(\)\s*,\s*INTERVAL\s+(\d+)\s+DAY\s*\)/gi,
       (_, days) => `datetime('now', '-${days} days')`,
     )
-    .replace(/\bNOW\(\)/gi, "CURRENT_TIMESTAMP");
+    .replace(/\bNOW\(\)/gi, "CURRENT_TIMESTAMP")
+    .replace(/\s+ON\s+DELETE\s+(CASCADE|SET\s+NULL|RESTRICT|NO\s+ACTION)/gi, "")
+    .replace(/\bON\s+UPDATE\s+CURRENT_TIMESTAMP\b/gi, "")
+    .replace(/\bINT\s+AUTO_INCREMENT\b/gi, "INTEGER PRIMARY KEY AUTOINCREMENT")
+    .replace(/\bTINYINT\(1\)\b/gi, "INTEGER")
+    .replace(/\bVARCHAR\(\d+\)\b/gi, "TEXT")
+    .replace(/\bDECIMAL\(\d+,\s*\d+\)\b/gi, "REAL")
+    .replace(/\bENUM\s*\([^)]+\)/gi, "TEXT")
+    .replace(/\bDATE\b/gi, "TEXT")
+    .replace(/\bTIME\b/gi, "TEXT")
+    .replace(/\bDATETIME\b/gi, "TEXT")
+    .replace(/\bTIMESTAMP\b/gi, "TEXT")
+    .replace(/\bJSON\b/gi, "TEXT")
+    .replace(/\bUNIQUE\s+KEY\s+\w+\b/gi, "UNIQUE")
+    .replace(/,\s*INDEX\s+\w+\s*\([^)]+\)/gi, "")
+    .replace(/\bCONSTRAINT\s+\w+\s+/gi, "");
 const hasColumn = async (connection, tableName, columnName) => {
   if (process.env.USE_SQLITE === "true") {
     const rows = connection.prepare(`PRAGMA table_info(${tableName})`).all();
@@ -216,23 +231,21 @@ const run = async () => {
     ];
 
     for (const user of defaultUsers) {
-      const [existsRows] = await connection.execute(
-        "SELECT user_id FROM users WHERE email = ? LIMIT 1",
-        [user.email],
-      );
+      const existsRows = process.env.USE_SQLITE === "true" 
+        ? connection.prepare("SELECT user_id FROM users WHERE email = ? LIMIT 1").get(user.email)
+        : await connection.execute("SELECT user_id FROM users WHERE email = ? LIMIT 1", [user.email]);
 
-      if (existsRows.length > 0) {
+      if ((process.env.USE_SQLITE === "true" && existsRows) || (!process.env.USE_SQLITE === "true" && existsRows.length > 0)) {
         continue;
       }
 
       const passwordHash = await bcrypt.hash(user.password, 10);
-      await connection.execute(
-        `
-        INSERT INTO users
-        (full_name, email, password_hash, phone, address, age, gender, role, doctor_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `,
-        [
+      if (process.env.USE_SQLITE === "true") {
+        connection.prepare(`
+          INSERT INTO users
+          (full_name, email, password_hash, phone, address, age, gender, role, doctor_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
           user.fullName,
           user.email,
           passwordHash,
@@ -242,8 +255,24 @@ const run = async () => {
           user.gender,
           user.role,
           user.doctorId,
-        ],
-      );
+        );
+      } else {
+        await connection.execute(`
+          INSERT INTO users
+          (full_name, email, password_hash, phone, address, age, gender, role, doctor_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+          user.fullName,
+          user.email,
+          passwordHash,
+          user.phone,
+          user.address,
+          user.age,
+          user.gender,
+          user.role,
+          user.doctorId,
+        ]);
+      }
     }
 
     // Seed doctors
@@ -299,22 +328,20 @@ const run = async () => {
     ];
 
     for (const doctor of defaultDoctors) {
-      const [existsRows] = await connection.execute(
-        "SELECT doctor_id FROM doctors WHERE email = ? LIMIT 1",
-        [doctor.email],
-      );
+      const existsRows = process.env.USE_SQLITE === "true" 
+        ? connection.prepare("SELECT doctor_id FROM doctors WHERE email = ? LIMIT 1").get(doctor.email)
+        : await connection.execute("SELECT doctor_id FROM doctors WHERE email = ? LIMIT 1", [doctor.email]);
 
-      if (existsRows.length > 0) {
+      if ((process.env.USE_SQLITE === "true" && existsRows) || (!process.env.USE_SQLITE === "true" && existsRows.length > 0)) {
         continue;
       }
 
-      await connection.execute(
-        `
-        INSERT INTO doctors
-        (name, email, phone, degree, specialization, department, qualification, experience_years, consultation_fee, is_available)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `,
-        [
+      if (process.env.USE_SQLITE === "true") {
+        connection.prepare(`
+          INSERT INTO doctors
+          (name, email, phone, degree, specialization, department, qualification, experience_years, consultation_fee, is_available)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
           doctor.name,
           doctor.email,
           doctor.phone,
@@ -325,8 +352,40 @@ const run = async () => {
           doctor.experience_years,
           doctor.consultation_fee,
           doctor.is_available,
-        ],
-      );
+        );
+      } else {
+        await connection.execute(`
+          INSERT INTO doctors
+          (name, email, phone, degree, specialization, department, qualification, experience_years, consultation_fee, is_available)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+          doctor.name,
+          doctor.email,
+          doctor.phone,
+          doctor.degree,
+          doctor.specialization,
+          doctor.department,
+          doctor.qualification,
+          doctor.experience_years,
+          doctor.consultation_fee,
+          doctor.is_available,
+        ]);
+      }
+    }
+
+    // Seed doctor schedules first
+    if (process.env.USE_SQLITE === "true") {
+      connection.prepare(`
+        INSERT OR IGNORE INTO doctor_schedules
+        (schedule_id, doctor_id, day_of_week, start_time, end_time, slot_duration, is_active)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(1, 1, 'Monday', '09:00:00', '17:00:00', 30, 1);
+    } else {
+      await connection.execute(`
+        INSERT IGNORE INTO doctor_schedules
+        (schedule_id, doctor_id, day_of_week, start_time, end_time, slot_duration, is_active)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `, [1, 1, 'Monday', '09:00:00', '17:00:00', 30, 1]);
     }
 
     // Seed appointments
@@ -431,26 +490,32 @@ const run = async () => {
 
     for (const appointment of defaultAppointments) {
       // Check if appointment already exists (by date, time, doctor)
-      const [existsRows] = await connection.execute(
-        "SELECT appointment_id FROM appointments WHERE doctor_id = ? AND appointment_date = ? AND appointment_time = ? LIMIT 1",
-        [
-          appointment.doctor_id,
-          appointment.appointment_date,
-          appointment.appointment_time,
-        ],
-      );
+      const existsRows = process.env.USE_SQLITE === "true" 
+        ? connection.prepare("SELECT appointment_id FROM appointments WHERE doctor_id = ? AND appointment_date = ? AND appointment_time = ? LIMIT 1").get(
+            appointment.doctor_id,
+            appointment.appointment_date,
+            appointment.appointment_time
+          )
+        : await connection.execute(
+            "SELECT appointment_id FROM appointments WHERE doctor_id = ? AND appointment_date = ? AND appointment_time = ? LIMIT 1",
+            [
+              appointment.doctor_id,
+              appointment.appointment_date,
+              appointment.appointment_time,
+            ]
+          );
 
-      if (existsRows.length > 0) {
+      if ((process.env.USE_SQLITE === "true" && existsRows) || (!process.env.USE_SQLITE === "true" && existsRows.length > 0)) {
         continue;
       }
 
-      await connection.execute(
-        `
-        INSERT INTO appointments
-        (doctor_id, patient_name, patient_age, patient_gender, patient_phone, patient_email, appointment_date, appointment_time, status, symptoms)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `,
-        [
+      if (process.env.USE_SQLITE === "true") {
+        connection.prepare(`
+          INSERT INTO appointments
+          (schedule_id, doctor_id, patient_name, patient_age, patient_gender, patient_phone, patient_email, appointment_date, appointment_time, status, symptoms)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          1, // Default schedule_id
           appointment.doctor_id,
           appointment.patient_name,
           appointment.patient_age,
@@ -461,18 +526,43 @@ const run = async () => {
           appointment.appointment_time,
           appointment.status,
           appointment.symptoms,
-        ],
-      );
+        );
+      } else {
+        await connection.execute(`
+          INSERT INTO appointments
+          (schedule_id, doctor_id, patient_name, patient_age, patient_gender, patient_phone, patient_email, appointment_date, appointment_time, status, symptoms)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+          1, // Default schedule_id
+          appointment.doctor_id,
+          appointment.patient_name,
+          appointment.patient_age,
+          appointment.patient_gender,
+          appointment.patient_phone,
+          appointment.patient_email,
+          appointment.appointment_date,
+          appointment.appointment_time,
+          appointment.status,
+          appointment.symptoms,
+        ]);
+      }
     }
 
-    await connection.execute(
-      `
-      UPDATE doctors
-      SET degree = COALESCE(degree, qualification),
-          medical_name = COALESCE(medical_name, 'MediAI SmartCare Hospital')
-      WHERE doctor_id = 1
-      `,
-    );
+    if (process.env.USE_SQLITE === "true") {
+      connection.prepare(`
+        UPDATE doctors
+        SET degree = COALESCE(degree, qualification),
+            medical_name = COALESCE(medical_name, 'MediAI SmartCare Hospital')
+        WHERE doctor_id = 1
+      `).run();
+    } else {
+      await connection.execute(`
+        UPDATE doctors
+        SET degree = COALESCE(degree, qualification),
+            medical_name = COALESCE(medical_name, 'MediAI SmartCare Hospital')
+        WHERE doctor_id = 1
+      `);
+    }
 
     console.log("Seed users ready");
     console.log("admin@mediai.com / Admin@123");
@@ -483,7 +573,9 @@ const run = async () => {
     console.error("Database initialization failed:", error.message);
     process.exit(1);
   } finally {
-    connection.release();
+    if (process.env.USE_SQLITE !== "true" && connection.release) {
+      connection.release();
+    }
   }
 };
 

@@ -14,6 +14,7 @@ const SymptomChecker = () => {
   const [error, setError] = useState(null);
   const [history, setHistory] = useState([]);
   const [showHistory, setShowHistory] = useState(false);
+  const [language, setLanguage] = useState("en");
 
   const handleChange = (e) => {
     setFormData({
@@ -34,6 +35,7 @@ const SymptomChecker = () => {
         age: formData.age ? parseInt(formData.age) : null,
         gender: formData.gender || null,
         symptoms: formData.symptoms,
+        language: language,
       });
 
       setResult(response);
@@ -89,16 +91,23 @@ const SymptomChecker = () => {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-3xl font-bold text-primary mb-2">
-              🤖 AI Symptom Checker & Triage System
+              🤖 {language === 'bn' ? 'এআই লক্ষণ পরীক্ষক এবং ট্রায়াজ সিস্টেম' : 'AI Symptom Checker & Triage System'}
             </h1>
             <p className="text-gray-600">
-              Get instant AI-powered health assessment and specialist
-              recommendations
+              {language === 'bn' ? 'তাত্ক্ষণিক এআই-চালিত স্বাস্থ্য মূল্যায়ন এবং বিশেষজ্ঞের পরামর্শ পান' : 'Get instant AI-powered health assessment and specialist recommendations'}
             </p>
           </div>
-          <button onClick={loadHistory} className="btn-secondary text-sm">
-            View History
-          </button>
+          <div className="flex gap-2">
+            <button 
+              onClick={() => setLanguage(l => l === "en" ? "bn" : "en")}
+              className="px-4 py-2 border rounded-xl text-sm font-semibold bg-white hover:bg-gray-50 transition"
+            >
+              {language === "en" ? "Bangla" : "English"}
+            </button>
+            <button onClick={loadHistory} className="btn-secondary text-sm">
+              {language === 'bn' ? 'ইতিহাস দেখুন' : 'View History'}
+            </button>
+          </div>
         </div>
 
         {/* Symptom Check Form */}
@@ -179,10 +188,10 @@ const SymptomChecker = () => {
               {loading ? (
                 <>
                   <span className="inline-block animate-spin mr-2">⏳</span>
-                  Analyzing Symptoms...
+                  {language === 'bn' ? 'লক্ষণ বিশ্লেষণ করা হচ্ছে...' : 'Analyzing Symptoms...'}
                 </>
               ) : (
-                "🔍 Analyze Symptoms"
+                language === 'bn' ? "🔍 লক্ষণ বিশ্লেষণ করুন" : "🔍 Analyze Symptoms"
               )}
             </button>
             {result && (
@@ -209,18 +218,18 @@ const SymptomChecker = () => {
           <div className="mt-6 space-y-4">
             <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg p-6 border border-blue-200">
               <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                📊 Analysis Results
+                📊 {language === 'bn' ? 'বিশ্লেষণের ফলাফল' : 'Analysis Results'}
                 <span
                   className={`ml-auto ${getUrgencyBadgeClass(result.analysis.urgencyLevel)}`}
                 >
-                  {result.analysis.urgencyLevel} Priority
+                  {result.analysis.urgencyLevel} {language === 'bn' ? 'অগ্রাধিকার' : 'Priority'}
                 </span>
               </h2>
 
               {/* Possible Diseases */}
               <div className="mb-4">
                 <h3 className="font-semibold text-gray-700 mb-2">
-                  🩺 Possible Conditions:
+                  🩺 {language === 'bn' ? 'সম্ভাব্য রোগসমূহ:' : 'Possible Conditions:'}
                 </h3>
                 <div className="flex flex-wrap gap-2">
                   {result.analysis.possibleDiseases.map((disease, index) => (
@@ -237,7 +246,7 @@ const SymptomChecker = () => {
               {/* Recommended Specialist */}
               <div className="mb-4">
                 <h3 className="font-semibold text-gray-700 mb-2">
-                  👨‍⚕️ Recommended Specialist:
+                  👨‍⚕️ {language === 'bn' ? 'প্রস্তাবিত বিশেষজ্ঞ:' : 'Recommended Specialist:'}
                 </h3>
                 <p className="bg-white px-4 py-2 rounded-lg border border-gray-200 inline-block">
                   {result.analysis.recommendedSpecialist}
@@ -247,7 +256,7 @@ const SymptomChecker = () => {
               {/* AI Advice */}
               <div className="mb-4">
                 <h3 className="font-semibold text-gray-700 mb-2">
-                  💡 Medical Advice:
+                  💡 {language === 'bn' ? 'চিকিৎসা পরামর্শ:' : 'Medical Advice:'}
                 </h3>
                 <p className="bg-white px-4 py-3 rounded-lg border border-gray-200">
                   {result.analysis.advice}
@@ -258,14 +267,14 @@ const SymptomChecker = () => {
               {result.analysis.warning && (
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                   <p className="text-yellow-800">
-                    <strong>⚠️ Note:</strong> {result.analysis.warning}
+                    <strong>⚠️ {language === 'bn' ? 'সতর্কতা:' : 'Note:'}</strong> {result.analysis.warning}
                   </p>
                 </div>
               )}
 
               {/* Disclaimer */}
               <div className="mt-4 bg-white border border-gray-300 rounded-xl bg-white/80 backdrop-blur-sm shadow-sm p-4">
-                <p className="text-xs text-gray-600">{result.disclaimer}</p>
+                <p className="text-xs text-gray-600">{language === 'bn' ? 'এটি একটি এআই-চালিত মূল্যায়ন এবং এটি পেশাদার চিকিৎসা পরামর্শের বিকল্প নয়।' : result.disclaimer}</p>
               </div>
             </div>
           </div>

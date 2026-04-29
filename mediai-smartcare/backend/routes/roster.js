@@ -6,13 +6,13 @@
 const express = require("express");
 const router = express.Router();
 const rosterController = require("../controllers/rosterController");
-const authMiddleware = require("../middleware/authMiddleware");
+const { requireAuth } = require("../middleware/authMiddleware");
 
 /**
  * POST /api/roster/staff
  * Create a new staff member
  */
-router.post("/staff", authMiddleware, (req, res) => {
+router.post("/staff", requireAuth, (req, res) => {
   try {
     const {
       firstName,
@@ -63,7 +63,7 @@ router.post("/staff", authMiddleware, (req, res) => {
  * POST /api/roster/shift
  * Create a shift for a staff member
  */
-router.post("/shift", authMiddleware, (req, res) => {
+router.post("/shift", requireAuth, (req, res) => {
   try {
     const {
       staffId,
@@ -115,7 +115,7 @@ router.post("/shift", authMiddleware, (req, res) => {
  * GET /api/roster/staff/:staffId/shifts
  * Get staff member's shifts for a date range
  */
-router.get("/staff/:staffId/shifts", authMiddleware, (req, res) => {
+router.get("/staff/:staffId/shifts", requireAuth, (req, res) => {
   try {
     const { staffId } = req.params;
     const { startDate, endDate } = req.query;
@@ -147,7 +147,7 @@ router.get("/staff/:staffId/shifts", authMiddleware, (req, res) => {
  * GET /api/roster/department/:department/shifts
  * Get all shifts for a department on a date
  */
-router.get("/department/:department/shifts", authMiddleware, (req, res) => {
+router.get("/department/:department/shifts", requireAuth, (req, res) => {
   try {
     const { department } = req.params;
     const { shiftDate } = req.query;
@@ -179,7 +179,7 @@ router.get("/department/:department/shifts", authMiddleware, (req, res) => {
  * POST /api/roster/attendance/check-in
  * Record staff check-in
  */
-router.post("/attendance/check-in", authMiddleware, (req, res) => {
+router.post("/attendance/check-in", requireAuth, (req, res) => {
   try {
     const { staffId, shiftId, notes } = req.body;
 
@@ -210,7 +210,7 @@ router.post("/attendance/check-in", authMiddleware, (req, res) => {
  * POST /api/roster/attendance/check-out
  * Record staff check-out
  */
-router.post("/attendance/check-out", authMiddleware, (req, res) => {
+router.post("/attendance/check-out", requireAuth, (req, res) => {
   try {
     const { staffId, notes } = req.body;
 
@@ -241,7 +241,7 @@ router.post("/attendance/check-out", authMiddleware, (req, res) => {
  * GET /api/roster/staff/:staffId/attendance
  * Get attendance records for a staff member
  */
-router.get("/staff/:staffId/attendance", authMiddleware, (req, res) => {
+router.get("/staff/:staffId/attendance", requireAuth, (req, res) => {
   try {
     const { staffId } = req.params;
     const { startDate, endDate } = req.query;
@@ -277,7 +277,7 @@ router.get("/staff/:staffId/attendance", authMiddleware, (req, res) => {
  * GET /api/roster/staff/:staffId/availability
  * Get staff member's availability status
  */
-router.get("/staff/:staffId/availability", authMiddleware, (req, res) => {
+router.get("/staff/:staffId/availability", requireAuth, (req, res) => {
   try {
     const { staffId } = req.params;
 
@@ -300,7 +300,7 @@ router.get("/staff/:staffId/availability", authMiddleware, (req, res) => {
  * PUT /api/roster/staff/:staffId/availability
  * Update staff member's availability status
  */
-router.put("/staff/:staffId/availability", authMiddleware, (req, res) => {
+router.put("/staff/:staffId/availability", requireAuth, (req, res) => {
   try {
     const { staffId } = req.params;
     const { status, location, updatedBy } = req.body;
@@ -337,7 +337,7 @@ router.put("/staff/:staffId/availability", authMiddleware, (req, res) => {
  * GET /api/roster/analytics
  * Get roster analytics for dashboard
  */
-router.get("/analytics", authMiddleware, (req, res) => {
+router.get("/analytics", requireAuth, (req, res) => {
   try {
     const { startDate, endDate, department } = req.query;
 

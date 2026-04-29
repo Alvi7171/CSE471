@@ -76,15 +76,38 @@ function PatientRegistration() {
 
     try {
       console.log("📤 Sending registration request:", formData);
-      const response = await axios.post(
+      // First create user account
+      const authResponse = await axios.post(
+        "http://localhost:1355/api/auth/register",
+        {
+          fullName: `${formData.firstName} ${formData.lastName}`,
+          email: formData.email || null,
+          password: "default123", // Default password that should be changed
+          phone: formData.phoneNumber,
+          role: "patient",
+          address: formData.address,
+          age: new Date().getFullYear() - new Date(formData.dateOfBirth).getFullYear(),
+          gender: formData.gender,
+        },
+      );
+
+      // Then create patient record
+      const patientResponse = await axios.post(
         "http://localhost:1355/api/patients/register",
         formData,
       );
 
-      console.log("📥 Response:", response.data);
+      const response = {
+        success: true,
+        user: authResponse.data.user,
+        patient: patientResponse.data.patient,
+        token: authResponse.data.token
+      };
 
-      if (response.data.success) {
-        const patientData = response.data.patient;
+      console.log("📥 Response:", response);
+
+      if (response.success) {
+        const patientData = response.patient;
         setSuccess(`✅ Patient registered successfully! Smart ID: ${patientData.smartPatientId}`);
         setRegisteredPatient(patientData);
         

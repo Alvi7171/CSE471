@@ -21,7 +21,7 @@ const { requireAuth, requireRole } = require("../middleware/authMiddleware");
 router.get(
   "/doctors",
   requireAuth,
-  requireRole("doctor", "admin"),
+  requireRole("patient", "doctor", "admin"),
   scheduleController.getAllDoctors,
 );
 
@@ -34,7 +34,7 @@ router.get(
 router.get(
   "/doctors/search",
   requireAuth,
-  requireRole("doctor", "admin"),
+  requireRole("patient", "doctor", "admin"),
   scheduleController.searchDoctors,
 );
 
@@ -46,7 +46,7 @@ router.get(
 router.get(
   "/doctors/:doctorId",
   requireAuth,
-  requireRole("doctor", "admin"),
+  requireRole("patient", "doctor", "admin"),
   scheduleController.getDoctorSchedule,
 );
 

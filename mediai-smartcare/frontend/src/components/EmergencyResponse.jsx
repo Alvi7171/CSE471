@@ -3,10 +3,12 @@ import axios from "axios";
 
 const API_BASE_URL = "http://localhost:1355/api";
 
-function EmergencyResponse() {
+function EmergencyResponse({ currentUser, targetEmergencyId, clearTargetEmergency }) {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [emergencies, setEmergencies] = useState([]);
   const [selectedEmergency, setSelectedEmergency] = useState(null);
+  const [doctors, setDoctors] = useState([]);
+  const [showDoctorList, setShowDoctorList] = useState(false);
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -32,6 +34,7 @@ function EmergencyResponse() {
     fetchEmergencies();
     fetchAlerts();
     fetchStats();
+    fetchDoctors();
     
     // Auto-refresh every 30 seconds
     const interval = setInterval(() => {
@@ -40,6 +43,14 @@ function EmergencyResponse() {
     }, 30000);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (targetEmergencyId) {
+      setActiveTab("dashboard");
+      fetchEmergencyDetails(targetEmergencyId);
+      if (clearTargetEmergency) clearTargetEmergency();
+    }
+  }, [targetEmergencyId]);
 
   const fetchEmergencies = async () => {
     setLoading(true);
@@ -77,6 +88,15 @@ function EmergencyResponse() {
       setStats(response.data.stats);
     } catch (err) {
       console.error("Failed to load stats");
+    }
+  };
+  
+  const fetchDoctors = async () => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/schedule/doctors`);
+      setDoctors(response.data.doctors || []);
+    } catch (err) {
+      console.error("Failed to load doctors");
     }
   };
 
@@ -127,10 +147,37 @@ function EmergencyResponse() {
     try {
       await axios.put(`${API_BASE_URL}/emergency/${emergencyId}/assign-doctor`, { doctorId });
       setSuccess("Doctor assigned successfully!");
+      setShowDoctorList(false);
       fetchEmergencies();
       fetchAlerts();
+      if (selectedEmergency?.emergencyCase?.emergency_id === emergencyId) {
+        fetchEmergencyDetails(emergencyId);
+      }
     } catch (err) {
       setError("Failed to assign doctor");
+    }
+  };
+
+  const handleAcceptEmergency = async (emergencyId) => {
+    setLoading(true);
+    try {
+      // 1. Update status to Active
+      await axios.put(`${API_BASE_URL}/emergency/${emergencyId}/status`, { status: "Active" });
+      
+      // 2. If current user is a doctor, assign themselves
+      if (currentUser?.role === "doctor" && currentUser.doctorId) {
+        await axios.put(`${API_BASE_URL}/emergency/${emergencyId}/assign-doctor`, { doctorId: currentUser.doctorId });
+      }
+      
+      setSuccess("Emergency accepted successfully!");
+      fetchEmergencies();
+      fetchStats();
+      fetchAlerts();
+      fetchEmergencyDetails(emergencyId);
+    } catch (err) {
+      setError("Failed to accept emergency");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -175,6 +222,7 @@ function EmergencyResponse() {
   const getStatusColor = (status) => {
     switch (status) {
       case "Active": return "bg-red-100 text-red-800";
+      case "Reported": return "bg-purple-100 text-purple-800 animate-pulse";
       case "In Treatment": return "bg-yellow-100 text-yellow-800";
       case "Admitted": return "bg-blue-100 text-blue-800";
       case "Discharged": return "bg-green-100 text-green-800";
@@ -183,7 +231,7 @@ function EmergencyResponse() {
     }
   };
 
-  const activeEmergencies = emergencies.filter(e => e.status === "Active" || e.status === "In Treatment");
+  const activeEmergencies = emergencies.filter(e => ["Reported", "Active", "In Treatment"].includes(e.status));
   const criticalCount = activeEmergencies.filter(e => e.severity === "Critical").length;
 
   return (
@@ -310,7 +358,7 @@ function EmergencyResponse() {
                     <div
                       key={emergency.emergency_id}
                       onClick={() => fetchEmergencyDetails(emergency.emergency_id)}
-                      className={`p-4 hover:bg-gray-50 cursor-pointer transition-colors ${emergency.severity === "Critical" ? "bg-red-50" : ""}`}
+                      className={`p-4 hover:bg-gray-50 cursor-pointer transition-colors ${emergency.severity === "Critical" || emergency.status === "Reported" ? "bg-red-50" : ""}`}
                     >
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
@@ -635,10 +683,21 @@ function EmergencyResponse() {
                   </div>
                 )}
 
-                {/* Status Update */}
+                {/* Status Update & Actions */}
                 <div className="border-t pt-4 mt-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Update Status</label>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex justify-between items-center mb-2">
+                    <label className="block text-sm font-medium text-gray-700">Actions & Status</label>
+                    {selectedEmergency.emergencyCase.status === "Reported" && (
+                      <button
+                        onClick={() => handleAcceptEmergency(selectedEmergency.emergencyCase.emergency_id)}
+                        className="px-6 py-2 bg-green-600 text-white rounded-lg font-bold hover:bg-green-700 shadow-md animate-bounce"
+                      >
+                        ✅ Accept Emergency
+                      </button>
+                    )}
+                  </div>
+                  
+                  <div className="flex flex-wrap gap-2 mb-4">
                     {["Active", "In Treatment", "Admitted", "Discharged", "Transferred"].map((status) => (
                       <button
                         key={status}
@@ -650,6 +709,40 @@ function EmergencyResponse() {
                       </button>
                     ))}
                   </div>
+
+                  {currentUser?.role === "admin" && (
+                    <div className="mt-4">
+                      <button
+                        onClick={() => setShowDoctorList(!showDoctorList)}
+                        className="w-full py-2 bg-blue-50 text-blue-600 border border-blue-200 rounded-lg font-semibold hover:bg-blue-100 flex items-center justify-center gap-2"
+                      >
+                        👨‍⚕️ {showDoctorList ? "Close Doctor List" : "Assign Doctor to Case"}
+                      </button>
+                      
+                      {showDoctorList && (
+                        <div className="mt-2 border rounded-lg overflow-hidden bg-gray-50 max-h-48 overflow-y-auto">
+                          {doctors.map(doc => (
+                            <div 
+                              key={doc.doctor_id} 
+                              className="p-3 border-b last:border-b-0 flex justify-between items-center hover:bg-white"
+                            >
+                              <div>
+                                <div className="font-semibold text-gray-800">{doc.name}</div>
+                                <div className="text-xs text-gray-500">{doc.specialization}</div>
+                              </div>
+                              <button
+                                onClick={() => handleAssignDoctor(selectedEmergency.emergencyCase.emergency_id, doc.doctor_id)}
+                                className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
+                              >
+                                Assign
+                              </button>
+                            </div>
+                          ))}
+                          {doctors.length === 0 && <div className="p-4 text-center text-gray-500 text-sm">No doctors found</div>}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Alerts History */}

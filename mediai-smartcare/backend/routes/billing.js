@@ -6,13 +6,13 @@
 const express = require("express");
 const router = express.Router();
 const billingController = require("../controllers/billingController");
-const authMiddleware = require("../middleware/authMiddleware");
+const { requireAuth, requireRole } = require("../middleware/authMiddleware");
 
 /**
  * POST /api/billing/generate-invoice
  * Generate an invoice from an appointment
  */
-router.post("/generate-invoice", authMiddleware, (req, res) => {
+router.post("/generate-invoice", requireAuth, (req, res) => {
   try {
     const { appointmentId, patientUserId } = req.body;
 
@@ -23,10 +23,7 @@ router.post("/generate-invoice", authMiddleware, (req, res) => {
       });
     }
 
-    const invoice = billingController.generateInvoice(
-      appointmentId,
-      patientUserId,
-    );
+    const invoice = billingController.generateInvoice(appointmentId, patientUserId);
 
     res.status(201).json({
       success: true,
@@ -34,7 +31,7 @@ router.post("/generate-invoice", authMiddleware, (req, res) => {
       message: "Invoice generated successfully",
     });
   } catch (error) {
-    console.error("Error in generate-invoice:", error);
+    console.error("Error generating invoice:", error);
     res.status(500).json({
       success: false,
       message: error.message,
@@ -46,7 +43,7 @@ router.post("/generate-invoice", authMiddleware, (req, res) => {
  * GET /api/billing/invoice/:invoiceId
  * Get invoice details with line items
  */
-router.get("/invoice/:invoiceId", authMiddleware, (req, res) => {
+router.get("/invoice/:invoiceId", requireAuth, (req, res) => {
   try {
     const { invoiceId } = req.params;
 
@@ -76,7 +73,7 @@ router.get("/invoice/:invoiceId", authMiddleware, (req, res) => {
  * GET /api/billing/patient/:patientUserId/invoices
  * Get all invoices for a patient
  */
-router.get("/patient/:patientUserId/invoices", authMiddleware, (req, res) => {
+router.get("/patient/:patientUserId/invoices", requireAuth, (req, res) => {
   try {
     const { patientUserId } = req.params;
 
@@ -100,7 +97,7 @@ router.get("/patient/:patientUserId/invoices", authMiddleware, (req, res) => {
  * POST /api/billing/payment
  * Record a payment for an invoice
  */
-router.post("/payment", authMiddleware, (req, res) => {
+router.post("/payment", requireAuth, (req, res) => {
   try {
     const { invoiceId, patientUserId, amount, paymentMethod, transactionId } =
       req.body;
@@ -139,7 +136,7 @@ router.post("/payment", authMiddleware, (req, res) => {
  * GET /api/billing/invoice/:invoiceId/payments
  * Get payment history for an invoice
  */
-router.get("/invoice/:invoiceId/payments", authMiddleware, (req, res) => {
+router.get("/invoice/:invoiceId/payments", requireAuth, (req, res) => {
   try {
     const { invoiceId } = req.params;
 
@@ -163,7 +160,7 @@ router.get("/invoice/:invoiceId/payments", authMiddleware, (req, res) => {
  * GET /api/billing/analytics
  * Get billing analytics for dashboard
  */
-router.get("/analytics", authMiddleware, (req, res) => {
+router.get("/analytics", requireAuth, (req, res) => {
   try {
     const { startDate, endDate } = req.query;
 

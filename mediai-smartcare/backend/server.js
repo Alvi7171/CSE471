@@ -9,11 +9,14 @@ const appointmentRoutes = require("./routes/appointments");
 const authRoutes = require("./routes/auth");
 const adminRoutes = require("./routes/admin");
 const patientRoutes = require("./routes/patients");
+const patientSearchRoutes = require("./routes/patientSearch");
 const analyticsRoutes = require("./routes/analytics");
 const notificationRoutes = require("./routes/notifications");
 const billingRoutes = require("./routes/billing");
 const rosterRoutes = require("./routes/roster");
 const labEmergencyRoutes = require("./routes/labEmergency");
+const labRoutes = require("./routes/lab");
+const emergencyRoutes = require("./routes/emergency");
 const {
   startNotificationScheduler,
 } = require("./utils/notificationService");
@@ -92,12 +95,13 @@ app.use("/api/appointments", appointmentRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/patients", patientRoutes);
+app.use("/api/patients", patientSearchRoutes);
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/billing", billingRoutes);
 app.use("/api/roster", rosterRoutes);
-app.use("/api/lab", labEmergencyRoutes);
-app.use("/api/emergency", labEmergencyRoutes);
+app.use("/api/lab", labRoutes);
+app.use("/api/emergency", emergencyRoutes);
 
 // ============================================
 // Error Handling Middleware

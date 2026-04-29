@@ -5,9 +5,15 @@ import NotificationCenter from "./components/NotificationCenter";
 import PatientBooking from "./components/PatientBooking";
 import PatientRegistration from "./components/PatientRegistration";
 import PatientTimeline from "./components/PatientTimeline";
+import PatientSearchManagement from "./components/PatientSearchManagement";
+import EnhancedMedicalTimeline from "./components/EnhancedMedicalTimeline";
 import SymptomChecker from "./components/SymptomChecker";
 import LabTestManagement from "./components/LabTestManagement";
 import EmergencyResponse from "./components/EmergencyResponse";
+import DoctorsList from "./components/DoctorsList";
+import PatientEmergencySOS from "./components/PatientEmergencySOS";
+import PatientLabReports from "./components/PatientLabReports";
+import GlobalEmergencyAlert from "./components/GlobalEmergencyAlert";
 import "./index.css";
 import { authAPI } from "./services/api";
 
@@ -33,12 +39,16 @@ const roleTabs = {
   patient: [
     { key: "symptom", label: "AI Symptom Checker" },
     { key: "booking", label: "Book Appointment" },
-    { key: "timeline", label: "Patient Records" },
+    { key: "doctors", label: "Doctors List" },
+    { key: "labreports", label: "🧪 Lab Reports" },
+    { key: "sos", label: "🚨 Emergency SOS" },
   ],
   doctor: [
     { key: "schedule", label: "Doctor Schedule" },
     { key: "labtests", label: "Lab Tests" },
     { key: "emergency", label: "Emergency Response" },
+    { key: "search", label: "Patient Search" },
+    { key: "timeline", label: "Medical Timeline" },
   ],
   admin: [
     { key: "schedule", label: "Doctor Schedule" },
@@ -48,7 +58,10 @@ const roleTabs = {
     { key: "roster", label: "Staff Roster" },
     { key: "labtests", label: "Lab Test Management" },
     { key: "emergency", label: "Emergency Response" },
+    { key: "search", label: "Patient Search" },
+    { key: "timeline", label: "Medical Timeline" },
     { key: "admin", label: "Admin Console" },
+    { key: "doctors", label: "Doctors List" },
   ],
 };
 
@@ -82,6 +95,7 @@ function App() {
   const [authError, setAuthError] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("symptom");
+  const [targetEmergencyId, setTargetEmergencyId] = useState(null);
 
   const tabs = useMemo(() => {
     if (!user) return [];
@@ -534,8 +548,11 @@ function App() {
             {activeTab === "booking" && user.role === "patient" && (
               <PatientBooking />
             )}
-            {activeTab === "timeline" && user.role === "patient" && (
-              <PatientTimeline />
+            {activeTab === "search" && (user.role === "doctor" || user.role === "admin") && (
+              <PatientSearchManagement />
+            )}
+            {activeTab === "timeline" && (user.role === "doctor" || user.role === "admin") && (
+              <EnhancedMedicalTimeline />
             )}
             {activeTab === "schedule" &&
               (user.role === "doctor" || user.role === "admin") && (
@@ -548,7 +565,20 @@ function App() {
               <LabTestManagement />
             )}
             {(activeTab === "emergency") && (
-              <EmergencyResponse />
+              <EmergencyResponse 
+                currentUser={user}
+                targetEmergencyId={targetEmergencyId} 
+                clearTargetEmergency={() => setTargetEmergencyId(null)} 
+              />
+            )}
+            {activeTab === "doctors" && (
+              <DoctorsList currentUser={user} />
+            )}
+            {activeTab === "sos" && user.role === "patient" && (
+              <PatientEmergencySOS currentUser={user} />
+            )}
+            {activeTab === "labreports" && user.role === "patient" && (
+              <PatientLabReports currentUser={user} />
             )}
           </main>
 
@@ -574,6 +604,13 @@ function App() {
           )}
         </section>
       </div>
+      <GlobalEmergencyAlert 
+        currentUser={user} 
+        onNavigate={(tab, emergencyId) => {
+          setActiveTab(tab);
+          if (emergencyId) setTargetEmergencyId(emergencyId);
+        }} 
+      />
     </div>
   );
 }

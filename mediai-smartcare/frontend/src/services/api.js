@@ -186,4 +186,22 @@ export const notificationAPI = {
   },
 };
 
+export const patientAPI = {
+  register: async (payload) => {
+    const response = await api.post("/patients/register", payload);
+    return response.data;
+  },
+  getHistory: async (patientId) => {
+    const response = await api.get(`/patients/${patientId}/complete-history`);
+    return response.data;
+  },
+};
+
+export const adminAPI = {
+  removeDoctor: async (doctorId) => {
+    const response = await api.delete(`/admin/doctors/${doctorId}`);
+    return response.data;
+  },
+};
+
 export default api;
