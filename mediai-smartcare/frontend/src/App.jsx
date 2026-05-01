@@ -1,17 +1,24 @@
 import { useEffect, useMemo, useState } from "react";
 import AnalyticsReports from "./components/AnalyticsReports";
+import BedAllocationDashboard from "./components/BedAllocationDashboard";
+import DoctorPortalSummary from "./components/DoctorPortalSummary";
+import DoctorPrescriptions from "./components/DoctorPrescriptions";
 import DoctorSchedule from "./components/DoctorSchedule";
-import NotificationCenter from "./components/NotificationCenter";
-import PatientBooking from "./components/PatientBooking";
-import PatientRegistration from "./components/PatientRegistration";
-import PatientTimeline from "./components/PatientTimeline";
-import SymptomChecker from "./components/SymptomChecker";
-import LabTestManagement from "./components/LabTestManagement";
 import EmergencyResponse from "./components/EmergencyResponse";
 import InventoryManagement from "./components/InventoryManagement";
-import BedAllocationDashboard from "./components/BedAllocationDashboard";
+import LabTestManagement from "./components/LabTestManagement";
+import NotificationCenter from "./components/NotificationCenter";
+import PatientBooking from "./components/PatientBooking";
+import PatientDocuments from "./components/PatientDocuments";
+import PatientPortalSummary from "./components/PatientPortalSummary";
+import PatientRegistration from "./components/PatientRegistration";
+import PatientTimeline from "./components/PatientTimeline";
+import ProfileEditorModal from "./components/ProfileEditorModal";
+import RosterManagement from "./components/RosterManagement";
+import SymptomChecker from "./components/SymptomChecker";
 import "./index.css";
 import { authAPI } from "./services/api";
+import { formatRoleUserId, getUserDisplayName } from "./utils/identity";
 
 const DEPARTMENTS = [
   "Cardiology",
@@ -36,9 +43,11 @@ const roleTabs = {
     { key: "symptom", label: "AI Symptom Checker" },
     { key: "booking", label: "Book Appointment" },
     { key: "timeline", label: "Patient Records" },
+    { key: "documents", label: "My Prescriptions" },
   ],
   doctor: [
     { key: "schedule", label: "Doctor Schedule" },
+    { key: "prescriptions", label: "Prescriptions" },
     { key: "labtests", label: "Lab Tests" },
     { key: "emergency", label: "Emergency Response" },
   ],
@@ -48,6 +57,7 @@ const roleTabs = {
     { key: "inventory", label: "Inventory & Medicines" },
     { key: "registration", label: "Patient Registration" },
     { key: "analytics", label: "Analytics Dashboard" },
+    { key: "prescriptions", label: "Prescriptions" },
     { key: "billing", label: "Billing & Payments" },
     { key: "roster", label: "Staff Roster" },
     { key: "labtests", label: "Lab Test Management" },
@@ -71,10 +81,42 @@ const initialAuthForm = {
 };
 
 const roleCards = [
-  { key: "doctor", icon: "🩺", label: "Doctor" },
-  { key: "patient", icon: "🧑", label: "Patient" },
-  { key: "admin", icon: "🛡️", label: "Admin" },
+  { key: "doctor", icon: "Doctor", label: "Doctor" },
+  { key: "patient", icon: "Patient", label: "Patient" },
+  { key: "admin", icon: "Admin", label: "Admin" },
 ];
+
+const buildRegisterPayload = (form, role) => {
+  const basePayload = {
+    fullName: form.fullName,
+    email: form.email,
+    password: form.password,
+    role,
+  };
+
+  if (role === "doctor") {
+    return {
+      ...basePayload,
+      phone: form.phone,
+      degree: form.degree,
+      department: form.department,
+      experienceYears: form.experienceYears,
+      medicalName: form.medicalName,
+    };
+  }
+
+  if (role === "patient") {
+    return {
+      ...basePayload,
+      phone: form.phone,
+      address: form.address,
+      age: form.age,
+      gender: form.gender,
+    };
+  }
+
+  return basePayload;
+};
 
 function App() {
   const [user, setUser] = useState(null);
@@ -85,6 +127,22 @@ function App() {
   const [authError, setAuthError] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("symptom");
+  const [dashboardIntent, setDashboardIntent] = useState(null);
+  const [showProfileEditor, setShowProfileEditor] = useState(false);
+  const [profileRefreshNonce, setProfileRefreshNonce] = useState(0);
+  const [dashboardRefreshNonce, setDashboardRefreshNonce] = useState(0);
+
+  const userDisplayName = useMemo(
+    () => getUserDisplayName(user),
+    [user?.fullName, user?.doctorProfile?.name, user?.role],
+  );
+
+  const formattedUserId = useMemo(
+    () => formatRoleUserId(user?.role, user?.userId),
+    [user?.role, user?.userId],
+  );
+
+  const showEmailSubtitle = Boolean(user?.email);
 
   const tabs = useMemo(() => {
     if (!user) return [];
@@ -101,11 +159,10 @@ function App() {
         const response = await authAPI.me();
         if (response.success) {
           setUser(response.user);
-          const defaultTab =
-            roleTabs[response.user.role]?.[0]?.key || "symptom";
+          const defaultTab = roleTabs[response.user.role]?.[0]?.key || "symptom";
           setActiveTab(defaultTab);
         }
-      } catch (error) {
+      } catch (_error) {
         authAPI.clearToken();
       } finally {
         setLoadingSession(false);
@@ -120,6 +177,16 @@ function App() {
     setAuthForm((prev) => ({ ...prev, [name]: value }));
   };
 
+  const handleNavigate = (tabKey, action = null, context = {}) => {
+    setActiveTab(tabKey);
+    setDashboardIntent({
+      tabKey,
+      action,
+      nonce: Date.now(),
+      ...context,
+    });
+  };
+
   const handleAuthSubmit = async (event) => {
     event.preventDefault();
     setAuthLoading(true);
@@ -128,24 +195,11 @@ function App() {
     try {
       const payload =
         authMode === "register"
-          ? {
-            fullName: authForm.fullName,
-            password: authForm.password,
-            role: selectedRegisterRole,
-            email: authForm.email,
-            phone: authForm.phone,
-            degree: authForm.degree,
-            department: authForm.department,
-            experienceYears: authForm.experienceYears,
-            medicalName: authForm.medicalName,
-            address: authForm.address,
-            age: authForm.age,
-            gender: authForm.gender,
-          }
+          ? buildRegisterPayload(authForm, selectedRegisterRole)
           : {
-            identifier: authForm.email,
-            password: authForm.password,
-          };
+              identifier: authForm.email,
+              password: authForm.password,
+            };
 
       const response =
         authMode === "register"
@@ -156,6 +210,8 @@ function App() {
       setUser(response.user);
       setAuthForm(initialAuthForm);
       setSelectedRegisterRole("patient");
+      setDashboardIntent(null);
+      setShowProfileEditor(false);
       setActiveTab(roleTabs[response.user.role]?.[0]?.key || "symptom");
     } catch (error) {
       setAuthError(error.response?.data?.message || "Authentication failed");
@@ -171,6 +227,18 @@ function App() {
     setSelectedRegisterRole("patient");
     setAuthForm(initialAuthForm);
     setActiveTab("symptom");
+    setDashboardIntent(null);
+    setShowProfileEditor(false);
+  };
+
+  const handleProfileSaved = (updatedUser) => {
+    setUser(updatedUser);
+    setProfileRefreshNonce(Date.now());
+    setShowProfileEditor(false);
+  };
+
+  const handleDashboardDataChanged = () => {
+    setDashboardRefreshNonce(Date.now());
   };
 
   const renderRegisterFields = () => {
@@ -324,36 +392,44 @@ function App() {
       );
     }
 
-    return (
-      <>
-        <input
-          className="input-field"
-          name="fullName"
-          placeholder="Full Name"
-          value={authForm.fullName}
-          onChange={handleAuthField}
-          required
-        />
-        <input
-          className="input-field"
-          type="email"
-          name="email"
-          placeholder="Email"
-          value={authForm.email}
-          onChange={handleAuthField}
-          required
-        />
-        <input
-          className="input-field"
-          type="password"
-          name="password"
-          placeholder="Password"
-          value={authForm.password}
-          onChange={handleAuthField}
-          required
-        />
-      </>
-    );
+    if (selectedRegisterRole === "admin") {
+      return (
+        <>
+          <input
+            className="input-field"
+            name="fullName"
+            placeholder="Admin Name"
+            value={authForm.fullName}
+            onChange={handleAuthField}
+            required
+          />
+          <input
+            className="input-field"
+            type="email"
+            name="email"
+            placeholder="Admin Email"
+            value={authForm.email}
+            onChange={handleAuthField}
+            required
+          />
+          <input
+            className="input-field"
+            type="password"
+            name="password"
+            placeholder="Password"
+            value={authForm.password}
+            onChange={handleAuthField}
+            required
+          />
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            Admin accounts use email-based login and do not require patient or
+            doctor profile details.
+          </div>
+        </>
+      );
+    }
+
+    return null;
   };
 
   if (loadingSession) {
@@ -377,10 +453,11 @@ function App() {
 
           <div className="flex rounded-xl bg-theme-soft p-1 mb-5">
             <button
-              className={`flex-1 py-2 rounded-lg text-sm font-semibold ${authMode === "login"
-                ? "bg-white text-theme-primary shadow"
-                : "text-gray-600"
-                }`}
+              className={`flex-1 py-2 rounded-lg text-sm font-semibold ${
+                authMode === "login"
+                  ? "bg-white text-theme-primary shadow"
+                  : "text-gray-600"
+              }`}
               onClick={() => {
                 setAuthMode("login");
                 setAuthError("");
@@ -389,10 +466,11 @@ function App() {
               Login
             </button>
             <button
-              className={`flex-1 py-2 rounded-lg text-sm font-semibold ${authMode === "register"
-                ? "bg-white text-theme-primary shadow"
-                : "text-gray-600"
-                }`}
+              className={`flex-1 py-2 rounded-lg text-sm font-semibold ${
+                authMode === "register"
+                  ? "bg-white text-theme-primary shadow"
+                  : "text-gray-600"
+              }`}
               onClick={() => {
                 setAuthMode("register");
                 setAuthError("");
@@ -408,13 +486,17 @@ function App() {
                 <button
                   key={item.key}
                   type="button"
-                  onClick={() => setSelectedRegisterRole(item.key)}
-                  className={`border rounded-xl p-3 text-center transition ${selectedRegisterRole === item.key
-                    ? "border-theme-primary bg-theme-soft"
-                    : "border-gray-200 bg-white"
-                    }`}
+                  onClick={() => {
+                    setSelectedRegisterRole(item.key);
+                    setAuthError("");
+                  }}
+                  className={`border rounded-xl p-3 text-center transition ${
+                    selectedRegisterRole === item.key
+                      ? "border-theme-primary bg-theme-soft"
+                      : "border-gray-200 bg-white"
+                  }`}
                 >
-                  <div className="text-2xl mb-1">{item.icon}</div>
+                  <div className="font-semibold text-sm">{item.icon}</div>
                   <div className="font-semibold text-sm">{item.label}</div>
                 </button>
               ))}
@@ -482,11 +564,13 @@ function App() {
             {tabs.map((tab) => (
               <button
                 key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
-                className={`w-full text-left px-4 py-3 rounded-xl transition-all duration-200 ${activeTab === tab.key
-                  ? "bg-white/15 border-l-4 border-theme-accent"
-                  : "hover:bg-white/10"
-                  }`}
+                onClick={() => handleNavigate(tab.key)}
+                aria-current={activeTab === tab.key ? "page" : undefined}
+                className={`w-full text-left px-4 py-3 rounded-xl transition-all duration-200 ${
+                  activeTab === tab.key
+                    ? "bg-white/20 text-white font-semibold border border-white/30 shadow-md"
+                    : "text-white/90 hover:bg-white/10 hover:text-white"
+                }`}
               >
                 {tab.label}
               </button>
@@ -495,17 +579,31 @@ function App() {
         </aside>
 
         <section className="p-4 md:p-8">
-          <header className="relative z-30 bg-white/85 backdrop-blur-md border border-white/70 rounded-2xl px-6 py-4 shadow-sm flex items-center justify-between mb-4">
-            <div>
+          <header className="relative z-30 bg-white/85 backdrop-blur-md border border-white/70 rounded-2xl px-6 py-4 shadow-sm mb-4 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div className="min-w-0">
               <p className="text-sm uppercase tracking-widest text-gray-500">
                 {user.role}
               </p>
-              <h2 className="text-xl font-semibold text-theme-primary">
-                {user.fullName}
+              <h2 className="text-xl font-semibold text-theme-primary break-words">
+                {userDisplayName}
               </h2>
+              {formattedUserId && (
+                <p className="text-sm text-gray-500 mt-1">ID: {formattedUserId}</p>
+              )}
+              {showEmailSubtitle && (
+                <p className="mt-1 max-w-[34rem] break-all text-[11px] leading-relaxed text-gray-400">
+                  {user.email}
+                </p>
+              )}
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <NotificationCenter />
+              <button
+                onClick={() => setShowProfileEditor(true)}
+                className="px-4 py-2 rounded-lg border border-theme-primary bg-theme-soft text-theme-primary hover:bg-theme-primary hover:text-white transition-colors"
+              >
+                Edit Profile
+              </button>
               <button
                 onClick={handleLogout}
                 className="px-4 py-2 rounded-lg border border-theme-primary text-theme-primary hover:bg-theme-primary hover:text-white transition-colors"
@@ -516,59 +614,94 @@ function App() {
           </header>
 
           {user.role === "patient" && (
-            <div className="bg-white/85 backdrop-blur-md border border-white/70 rounded-2xl p-4 mb-6 shadow-sm">
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-500 mb-2">
-                Patient Details
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 text-sm text-gray-700">
-                <div>Name: {user.fullName || "-"}</div>
-                <div>Mobile: {user.phone || "-"}</div>
-                <div>Email: {user.email || "-"}</div>
-                <div>Address: {user.address || "-"}</div>
-                <div>Age: {user.age || "-"}</div>
-                <div>Gender: {user.gender || "-"}</div>
-              </div>
-            </div>
+            <PatientPortalSummary
+              currentUser={user}
+              onEditProfile={() => setShowProfileEditor(true)}
+              onNavigate={handleNavigate}
+              refreshNonce={dashboardRefreshNonce}
+            />
           )}
-          <main className="py-6">
-            {activeTab === "symptom" && user.role === "patient" && (
-              <SymptomChecker />
+
+          {user.role === "doctor" && (
+            <DoctorPortalSummary
+              currentUser={user}
+              onEditProfile={() => setShowProfileEditor(true)}
+              onNavigate={handleNavigate}
+              refreshNonce={dashboardRefreshNonce}
+            />
+          )}
+
+          {activeTab === "symptom" && user.role === "patient" && (
+            <SymptomChecker currentUser={user} />
+          )}
+          {activeTab === "booking" && user.role === "patient" && (
+            <PatientBooking />
+          )}
+          {activeTab === "timeline" && user.role === "patient" && (
+            <PatientTimeline currentUser={user} />
+          )}
+          {activeTab === "documents" && user.role === "patient" && (
+            <PatientDocuments currentUser={user} />
+          )}
+          {activeTab === "schedule" &&
+            (user.role === "doctor" || user.role === "admin") && (
+              <DoctorSchedule
+                currentUser={user}
+                dashboardIntent={dashboardIntent}
+                profileRefreshNonce={profileRefreshNonce}
+                onAppointmentsChanged={handleDashboardDataChanged}
+              />
             )}
-            {activeTab === "booking" && user.role === "patient" && (
-              <PatientBooking />
+          {activeTab === "prescriptions" &&
+            (user.role === "doctor" || user.role === "admin") && (
+              <DoctorPrescriptions
+                currentUser={user}
+                dashboardIntent={dashboardIntent}
+              />
             )}
-            {activeTab === "timeline" && user.role === "patient" && (
-              <PatientTimeline />
-            )}
-            {activeTab === "schedule" &&
-              (user.role === "doctor" || user.role === "admin") && (
-                <DoctorSchedule currentUser={user} />
-              )}
-            {activeTab === "registration" && user.role === "admin" && (
-              <PatientRegistration />
-            )}
-            {(activeTab === "labtests") && (
+          {activeTab === "registration" && user.role === "admin" && (
+            <PatientRegistration />
+          )}
+          {activeTab === "labtests" &&
+            (user.role === "doctor" || user.role === "admin") && (
               <LabTestManagement />
             )}
-            {(activeTab === "emergency") && (
+          {activeTab === "emergency" &&
+            (user.role === "doctor" || user.role === "admin") && (
               <EmergencyResponse />
             )}
-          </main>
-
           {activeTab === "analytics" && user.role === "admin" && (
             <AnalyticsReports />
           )}
-
           {activeTab === "inventory" && user.role === "admin" && (
             <InventoryManagement />
           )}
-
           {activeTab === "beds" && user.role === "admin" && (
             <BedAllocationDashboard />
           )}
-
+          {activeTab === "roster" && user.role === "admin" && (
+            <RosterManagement />
+          )}
+          {activeTab === "billing" && user.role === "admin" && (
+            <div className="bg-white/85 backdrop-blur-md border border-white/70 rounded-2xl p-8 shadow-sm">
+              <h3 className="text-2xl font-semibold text-theme-primary mb-3">
+                Billing & Payments
+              </h3>
+              <p className="text-gray-700">
+                Billing dashboard placeholder is active. Connect billing APIs and
+                invoice views to enable this section.
+              </p>
+            </div>
+          )}
         </section>
       </div>
+
+      <ProfileEditorModal
+        currentUser={user}
+        isOpen={showProfileEditor}
+        onClose={() => setShowProfileEditor(false)}
+        onSaved={handleProfileSaved}
+      />
     </div>
   );
 }

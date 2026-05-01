@@ -3,7 +3,7 @@
  * Handles lab test requests, results, reports, and emergency response management
  */
 
-const { db } = require("../config/database");
+const { db, engine } = require("../config/database");
 
 // ============================================
 // UTILITY FUNCTIONS
@@ -14,9 +14,9 @@ const { db } = require("../config/database");
  */
 const initializeLabEmergencyTables = () => {
   try {
-    if (typeof db.exec !== "function") {
+    if (engine !== "sqlite") {
       console.log(
-        "ℹ️ Skipping SQLite lab/emergency table bootstrap for non-SQLite database engine",
+        "ℹ️ Skipping SQLite lab & emergency table bootstrap for non-SQLite database engine",
       );
       return;
     }
@@ -131,10 +131,7 @@ const initializeLabEmergencyTables = () => {
     `);
     console.log("✅ Lab & Emergency tables initialized successfully");
   } catch (error) {
-    console.error(
-      "❌ Error initializing lab & emergency tables:",
-      error.message,
-    );
+    console.error("❌ Error initializing lab & emergency tables:", error.message);
   }
 };
 
@@ -152,23 +149,14 @@ initializeLabEmergencyTables();
 exports.createLabTest = (req, res) => {
   try {
     const {
-      patientId,
-      doctorId,
-      appointmentId,
-      testType,
-      testName,
-      priority,
-      scheduledDate,
-      labName,
-      cost,
-      notes,
+      patientId, doctorId, appointmentId, testType, testName,
+      priority, scheduledDate, labName, cost, notes
     } = req.body;
 
     if (!patientId || !doctorId || !testType || !testName) {
       return res.status(400).json({
         success: false,
-        message:
-          "Missing required fields: patientId, doctorId, testType, testName",
+        message: "Missing required fields: patientId, doctorId, testType, testName"
       });
     }
 
@@ -180,30 +168,22 @@ exports.createLabTest = (req, res) => {
     `);
 
     const result = stmt.run(
-      patientId,
-      doctorId,
-      appointmentId || null,
-      testType,
-      testName,
-      priority || "Normal",
-      new Date().toISOString(),
-      scheduledDate || null,
-      labName || null,
-      cost || null,
-      notes || null,
+      patientId, doctorId, appointmentId || null, testType, testName,
+      priority || 'Normal', new Date().toISOString(), scheduledDate || null,
+      labName || null, cost || null, notes || null
     );
 
     res.status(201).json({
       success: true,
       message: "Lab test request created successfully",
-      testId: result.lastInsertRowid,
+      testId: result.lastInsertRowid
     });
   } catch (error) {
     console.error("Error creating lab test:", error.message);
     res.status(500).json({
       success: false,
       message: "Error creating lab test request",
-      error: error.message,
+      error: error.message
     });
   }
 };
@@ -254,14 +234,14 @@ exports.getLabTests = (req, res) => {
 
     res.json({
       success: true,
-      tests: tests || [],
+      tests: tests || []
     });
   } catch (error) {
     console.error("Error fetching lab tests:", error.message);
     res.status(500).json({
       success: false,
       message: "Error fetching lab tests",
-      error: error.message,
+      error: error.message
     });
   }
 };
@@ -287,34 +267,30 @@ exports.getLabTestById = (req, res) => {
     if (!test) {
       return res.status(404).json({
         success: false,
-        message: "Lab test not found",
+        message: "Lab test not found"
       });
     }
 
     // Get results
-    const resultsStmt = db.prepare(
-      "SELECT * FROM lab_results WHERE test_id = ?",
-    );
+    const resultsStmt = db.prepare("SELECT * FROM lab_results WHERE test_id = ?");
     const results = resultsStmt.all(testId);
 
     // Get report
-    const reportStmt = db.prepare(
-      "SELECT * FROM lab_reports WHERE test_id = ? ORDER BY report_date DESC LIMIT 1",
-    );
+    const reportStmt = db.prepare("SELECT * FROM lab_reports WHERE test_id = ? ORDER BY report_date DESC LIMIT 1");
     const report = reportStmt.get(testId);
 
     res.json({
       success: true,
       test,
       results,
-      report,
+      report
     });
   } catch (error) {
     console.error("Error fetching lab test:", error.message);
     res.status(500).json({
       success: false,
       message: "Error fetching lab test",
-      error: error.message,
+      error: error.message
     });
   }
 };
@@ -328,28 +304,22 @@ exports.updateLabTestStatus = (req, res) => {
     const { testId } = req.params;
     const { status, collectedDate, completedDate } = req.body;
 
-    const validStatuses = [
-      "Pending",
-      "Sample Collected",
-      "In Progress",
-      "Completed",
-      "Cancelled",
-    ];
+    const validStatuses = ['Pending', 'Sample Collected', 'In Progress', 'Completed', 'Cancelled'];
     if (!validStatuses.includes(status)) {
       return res.status(400).json({
         success: false,
-        message: "Invalid status",
+        message: "Invalid status"
       });
     }
 
     let query = "UPDATE lab_tests SET status = ?, updated_at = ?";
     const params = [status, new Date().toISOString()];
 
-    if (status === "Sample Collected" && collectedDate) {
+    if (status === 'Sample Collected' && collectedDate) {
       query += ", collected_date = ?";
       params.push(collectedDate);
     }
-    if (status === "Completed" && completedDate) {
+    if (status === 'Completed' && completedDate) {
       query += ", completed_date = ?";
       params.push(completedDate);
     }
@@ -363,20 +333,20 @@ exports.updateLabTestStatus = (req, res) => {
     if (result.changes === 0) {
       return res.status(404).json({
         success: false,
-        message: "Lab test not found",
+        message: "Lab test not found"
       });
     }
 
     res.json({
       success: true,
-      message: "Lab test status updated",
+      message: "Lab test status updated"
     });
   } catch (error) {
     console.error("Error updating lab test status:", error.message);
     res.status(500).json({
       success: false,
       message: "Error updating lab test status",
-      error: error.message,
+      error: error.message
     });
   }
 };
@@ -393,7 +363,7 @@ exports.addLabResults = (req, res) => {
     if (!results || !Array.isArray(results)) {
       return res.status(400).json({
         success: false,
-        message: "Results array is required",
+        message: "Results array is required"
       });
     }
 
@@ -405,14 +375,9 @@ exports.addLabResults = (req, res) => {
     const insertMany = db.transaction((results) => {
       for (const r of results) {
         insertStmt.run(
-          testId,
-          r.parameterName,
-          r.value,
-          r.unit || null,
-          r.referenceRange || null,
-          r.isAbnormal ? 1 : 0,
-          r.abnormalityLevel || null,
-          r.notes || null,
+          testId, r.parameterName, r.value, r.unit || null,
+          r.referenceRange || null, r.isAbnormal ? 1 : 0,
+          r.abnormalityLevel || null, r.notes || null
         );
       }
     });
@@ -420,21 +385,19 @@ exports.addLabResults = (req, res) => {
     insertMany(results);
 
     // Update test status to In Progress if not already
-    db.prepare(
-      "UPDATE lab_tests SET status = 'In Progress' WHERE test_id = ? AND status = 'Sample Collected'",
-    ).run(testId);
+    db.prepare("UPDATE lab_tests SET status = 'In Progress' WHERE test_id = ? AND status = 'Sample Collected'").run(testId);
 
     res.status(201).json({
       success: true,
       message: "Lab results added successfully",
-      resultCount: results.length,
+      resultCount: results.length
     });
   } catch (error) {
     console.error("Error adding lab results:", error.message);
     res.status(500).json({
       success: false,
       message: "Error adding lab results",
-      error: error.message,
+      error: error.message
     });
   }
 };
@@ -446,8 +409,7 @@ exports.addLabResults = (req, res) => {
 exports.generateLabReport = (req, res) => {
   try {
     const { testId } = req.params;
-    const { reportType, labTechnician, reviewedBy, summary, interpretation } =
-      req.body;
+    const { reportType, labTechnician, reviewedBy, summary, interpretation } = req.body;
 
     // Get test details
     const testStmt = db.prepare("SELECT * FROM lab_tests WHERE test_id = ?");
@@ -456,20 +418,16 @@ exports.generateLabReport = (req, res) => {
     if (!test) {
       return res.status(404).json({
         success: false,
-        message: "Lab test not found",
+        message: "Lab test not found"
       });
     }
 
     // Get results
-    const resultsStmt = db.prepare(
-      "SELECT * FROM lab_results WHERE test_id = ?",
-    );
+    const resultsStmt = db.prepare("SELECT * FROM lab_results WHERE test_id = ?");
     const results = resultsStmt.all(testId);
 
     // Check for critical abnormalities
-    const criticalResults = results.filter(
-      (r) => r.abnormality_level === "Critical",
-    );
+    const criticalResults = results.filter(r => r.abnormality_level === 'Critical');
     const hasCritical = criticalResults.length > 0;
 
     const stmt = db.prepare(`
@@ -481,32 +439,30 @@ exports.generateLabReport = (req, res) => {
 
     const result = stmt.run(
       testId,
-      reportType || "Complete Blood Count",
+      reportType || 'Complete Blood Count',
       new Date().toISOString(),
       labTechnician || null,
       reviewedBy || null,
-      summary ||
-        `Test completed with ${results.length} parameters analyzed.${hasCritical ? " CRITICAL VALUES DETECTED - Immediate doctor review required." : ""}`,
-      interpretation || null,
+      summary || `Test completed with ${results.length} parameters analyzed.${hasCritical ? ' CRITICAL VALUES DETECTED - Immediate doctor review required.' : ''}`,
+      interpretation || null
     );
 
     // Update test status to Completed
-    db.prepare(
-      "UPDATE lab_tests SET status = 'Completed', completed_date = ? WHERE test_id = ?",
-    ).run(new Date().toISOString(), testId);
+    db.prepare("UPDATE lab_tests SET status = 'Completed', completed_date = ? WHERE test_id = ?")
+      .run(new Date().toISOString(), testId);
 
     res.status(201).json({
       success: true,
       message: "Lab report generated successfully",
       reportId: result.lastInsertRowid,
-      hasCriticalValues: hasCritical,
+      hasCriticalValues: hasCritical
     });
   } catch (error) {
     console.error("Error generating lab report:", error.message);
     res.status(500).json({
       success: false,
       message: "Error generating lab report",
-      error: error.message,
+      error: error.message
     });
   }
 };
@@ -525,29 +481,25 @@ exports.deliverLabReport = (req, res) => {
       WHERE report_id = ?
     `);
 
-    const result = stmt.run(
-      new Date().toISOString(),
-      deliveredTo || "Patient",
-      reportId,
-    );
+    const result = stmt.run(new Date().toISOString(), deliveredTo || 'Patient', reportId);
 
     if (result.changes === 0) {
       return res.status(404).json({
         success: false,
-        message: "Report not found",
+        message: "Report not found"
       });
     }
 
     res.json({
       success: true,
-      message: "Report delivered successfully",
+      message: "Report delivered successfully"
     });
   } catch (error) {
     console.error("Error delivering report:", error.message);
     res.status(500).json({
       success: false,
       message: "Error delivering report",
-      error: error.message,
+      error: error.message
     });
   }
 };
@@ -558,40 +510,18 @@ exports.deliverLabReport = (req, res) => {
  */
 exports.getLabStats = (req, res) => {
   try {
-    const totalTests = db
-      .prepare("SELECT COUNT(*) as count FROM lab_tests")
-      .get().count;
-    const pendingTests = db
-      .prepare(
-        "SELECT COUNT(*) as count FROM lab_tests WHERE status = 'Pending'",
-      )
-      .get().count;
-    const completedTests = db
-      .prepare(
-        "SELECT COUNT(*) as count FROM lab_tests WHERE status = 'Completed'",
-      )
-      .get().count;
-    const emergencyTests = db
-      .prepare(
-        "SELECT COUNT(*) as count FROM lab_tests WHERE priority = 'Emergency'",
-      )
-      .get().count;
+    const totalTests = db.prepare("SELECT COUNT(*) as count FROM lab_tests").get().count;
+    const pendingTests = db.prepare("SELECT COUNT(*) as count FROM lab_tests WHERE status = 'Pending'").get().count;
+    const completedTests = db.prepare("SELECT COUNT(*) as count FROM lab_tests WHERE status = 'Completed'").get().count;
+    const emergencyTests = db.prepare("SELECT COUNT(*) as count FROM lab_tests WHERE priority = 'Emergency'").get().count;
 
-    const testsByType = db
-      .prepare(
-        `
+    const testsByType = db.prepare(`
       SELECT test_type, COUNT(*) as count FROM lab_tests GROUP BY test_type
-    `,
-      )
-      .all();
+    `).all();
 
-    const testsByStatus = db
-      .prepare(
-        `
+    const testsByStatus = db.prepare(`
       SELECT status, COUNT(*) as count FROM lab_tests GROUP BY status
-    `,
-      )
-      .all();
+    `).all();
 
     res.json({
       success: true,
@@ -601,15 +531,15 @@ exports.getLabStats = (req, res) => {
         completedTests,
         emergencyTests,
         testsByType,
-        testsByStatus,
-      },
+        testsByStatus
+      }
     });
   } catch (error) {
     console.error("Error fetching lab stats:", error.message);
     res.status(500).json({
       success: false,
       message: "Error fetching lab statistics",
-      error: error.message,
+      error: error.message
     });
   }
 };
@@ -625,37 +555,25 @@ exports.getLabStats = (req, res) => {
 exports.createEmergencyCase = (req, res) => {
   try {
     const {
-      patientId,
-      patientName,
-      patientPhone,
-      patientAge,
-      patientGender,
-      emergencyType,
-      severity,
-      triageCategory,
-      location,
-      chiefComplaint,
-      vitalSigns,
-      initialAssessment,
-      assignedDoctorId,
-      assignedNurseId,
+      patientId, patientName, patientPhone, patientAge, patientGender,
+      emergencyType, severity, triageCategory, location, chiefComplaint,
+      vitalSigns, initialAssessment, assignedDoctorId, assignedNurseId
     } = req.body;
 
     if (!patientName || !emergencyType || !severity) {
       return res.status(400).json({
         success: false,
-        message:
-          "Missing required fields: patientName, emergencyType, severity",
+        message: "Missing required fields: patientName, emergencyType, severity"
       });
     }
 
     // Determine triage category if not provided
     let assignedTriage = triageCategory;
     if (!assignedTriage) {
-      if (severity === "Critical") assignedTriage = "Resuscitation";
-      else if (severity === "High") assignedTriage = "Emergency";
-      else if (severity === "Medium") assignedTriage = "Urgent";
-      else assignedTriage = "Less Urgent";
+      if (severity === 'Critical') assignedTriage = 'Resuscitation';
+      else if (severity === 'High') assignedTriage = 'Emergency';
+      else if (severity === 'Medium') assignedTriage = 'Urgent';
+      else assignedTriage = 'Less Urgent';
     }
 
     const stmt = db.prepare(`
@@ -668,21 +586,11 @@ exports.createEmergencyCase = (req, res) => {
     `);
 
     const result = stmt.run(
-      patientId || null,
-      patientName,
-      patientPhone || null,
-      patientAge || null,
-      patientGender || null,
-      emergencyType,
-      severity,
-      assignedTriage,
-      new Date().toISOString(),
-      location || null,
-      chiefComplaint || null,
-      vitalSigns ? JSON.stringify(vitalSigns) : null,
-      initialAssessment || null,
-      assignedDoctorId || null,
-      assignedNurseId || null,
+      patientId || null, patientName, patientPhone || null, patientAge || null,
+      patientGender || null, emergencyType, severity, assignedTriage,
+      new Date().toISOString(), location || null, chiefComplaint || null,
+      vitalSigns ? JSON.stringify(vitalSigns) : null, initialAssessment || null,
+      assignedDoctorId || null, assignedNurseId || null
     );
 
     const emergencyId = result.lastInsertRowid;
@@ -692,24 +600,20 @@ exports.createEmergencyCase = (req, res) => {
       INSERT INTO emergency_alerts (emergency_id, alert_type, message, priority)
       VALUES (?, 'New Emergency', ?, ?)
     `);
-    alertStmt.run(
-      emergencyId,
-      `New ${severity} emergency case: ${emergencyType}`,
-      severity === "Critical" ? "Critical" : "High",
-    );
+    alertStmt.run(emergencyId, `New ${severity} emergency case: ${emergencyType}`, severity === 'Critical' ? 'Critical' : 'High');
 
     res.status(201).json({
       success: true,
       message: "Emergency case created successfully",
       emergencyId,
-      triageCategory: assignedTriage,
+      triageCategory: assignedTriage
     });
   } catch (error) {
     console.error("Error creating emergency case:", error.message);
     res.status(500).json({
       success: false,
       message: "Error creating emergency case",
-      error: error.message,
+      error: error.message
     });
   }
 };
@@ -754,14 +658,14 @@ exports.getEmergencyCases = (req, res) => {
 
     res.json({
       success: true,
-      cases: cases || [],
+      cases: cases || []
     });
   } catch (error) {
     console.error("Error fetching emergency cases:", error.message);
     res.status(500).json({
       success: false,
       message: "Error fetching emergency cases",
-      error: error.message,
+      error: error.message
     });
   }
 };
@@ -785,14 +689,12 @@ exports.getEmergencyCaseById = (req, res) => {
     if (!emergencyCase) {
       return res.status(404).json({
         success: false,
-        message: "Emergency case not found",
+        message: "Emergency case not found"
       });
     }
 
     // Get alerts
-    const alertsStmt = db.prepare(
-      "SELECT * FROM emergency_alerts WHERE emergency_id = ? ORDER BY created_at DESC",
-    );
+    const alertsStmt = db.prepare("SELECT * FROM emergency_alerts WHERE emergency_id = ? ORDER BY created_at DESC");
     const alerts = alertsStmt.all(emergencyId);
 
     // Get team
@@ -808,14 +710,14 @@ exports.getEmergencyCaseById = (req, res) => {
       success: true,
       emergencyCase,
       alerts,
-      team,
+      team
     });
   } catch (error) {
     console.error("Error fetching emergency case:", error.message);
     res.status(500).json({
       success: false,
       message: "Error fetching emergency case",
-      error: error.message,
+      error: error.message
     });
   }
 };
@@ -829,18 +731,11 @@ exports.updateEmergencyStatus = (req, res) => {
     const { emergencyId } = req.params;
     const { status, treatmentGiven, outcome, notes } = req.body;
 
-    const validStatuses = [
-      "Active",
-      "In Treatment",
-      "Admitted",
-      "Discharged",
-      "Transferred",
-      "Deceased",
-    ];
+    const validStatuses = ['Active', 'In Treatment', 'Admitted', 'Discharged', 'Transferred', 'Deceased'];
     if (!validStatuses.includes(status)) {
       return res.status(400).json({
         success: false,
-        message: "Invalid status",
+        message: "Invalid status"
       });
     }
 
@@ -869,7 +764,7 @@ exports.updateEmergencyStatus = (req, res) => {
     if (result.changes === 0) {
       return res.status(404).json({
         success: false,
-        message: "Emergency case not found",
+        message: "Emergency case not found"
       });
     }
 
@@ -882,14 +777,14 @@ exports.updateEmergencyStatus = (req, res) => {
 
     res.json({
       success: true,
-      message: "Emergency status updated",
+      message: "Emergency status updated"
     });
   } catch (error) {
     console.error("Error updating emergency status:", error.message);
     res.status(500).json({
       success: false,
       message: "Error updating emergency status",
-      error: error.message,
+      error: error.message
     });
   }
 };
@@ -906,7 +801,7 @@ exports.assignDoctorToEmergency = (req, res) => {
     if (!doctorId) {
       return res.status(400).json({
         success: false,
-        message: "Doctor ID is required",
+        message: "Doctor ID is required"
       });
     }
 
@@ -919,14 +814,12 @@ exports.assignDoctorToEmergency = (req, res) => {
     if (result.changes === 0) {
       return res.status(404).json({
         success: false,
-        message: "Emergency case not found",
+        message: "Emergency case not found"
       });
     }
 
     // Get doctor name for alert
-    const doctorStmt = db.prepare(
-      "SELECT name FROM doctors WHERE doctor_id = ?",
-    );
+    const doctorStmt = db.prepare("SELECT name FROM doctors WHERE doctor_id = ?");
     const doctor = doctorStmt.get(doctorId);
 
     // Create assignment alert
@@ -938,14 +831,14 @@ exports.assignDoctorToEmergency = (req, res) => {
 
     res.json({
       success: true,
-      message: "Doctor assigned successfully",
+      message: "Doctor assigned successfully"
     });
   } catch (error) {
     console.error("Error assigning doctor:", error.message);
     res.status(500).json({
       success: false,
       message: "Error assigning doctor",
-      error: error.message,
+      error: error.message
     });
   }
 };
@@ -974,14 +867,14 @@ exports.getActiveEmergencies = (req, res) => {
 
     res.json({
       success: true,
-      cases,
+      cases
     });
   } catch (error) {
     console.error("Error fetching active emergencies:", error.message);
     res.status(500).json({
       success: false,
       message: "Error fetching active emergencies",
-      error: error.message,
+      error: error.message
     });
   }
 };
@@ -992,43 +885,21 @@ exports.getActiveEmergencies = (req, res) => {
  */
 exports.getEmergencyStats = (req, res) => {
   try {
-    const totalCases = db
-      .prepare("SELECT COUNT(*) as count FROM emergency_cases")
-      .get().count;
-    const activeCases = db
-      .prepare(
-        "SELECT COUNT(*) as count FROM emergency_cases WHERE status IN ('Active', 'In Treatment')",
-      )
-      .get().count;
-    const criticalCases = db
-      .prepare(
-        "SELECT COUNT(*) as count FROM emergency_cases WHERE severity = 'Critical' AND status IN ('Active', 'In Treatment')",
-      )
-      .get().count;
+    const totalCases = db.prepare("SELECT COUNT(*) as count FROM emergency_cases").get().count;
+    const activeCases = db.prepare("SELECT COUNT(*) as count FROM emergency_cases WHERE status IN ('Active', 'In Treatment')").get().count;
+    const criticalCases = db.prepare("SELECT COUNT(*) as count FROM emergency_cases WHERE severity = 'Critical' AND status IN ('Active', 'In Treatment')").get().count;
 
-    const casesBySeverity = db
-      .prepare(
-        `
+    const casesBySeverity = db.prepare(`
       SELECT severity, COUNT(*) as count FROM emergency_cases GROUP BY severity
-    `,
-      )
-      .all();
+    `).all();
 
-    const casesByStatus = db
-      .prepare(
-        `
+    const casesByStatus = db.prepare(`
       SELECT status, COUNT(*) as count FROM emergency_cases GROUP BY status
-    `,
-      )
-      .all();
+    `).all();
 
-    const casesByType = db
-      .prepare(
-        `
+    const casesByType = db.prepare(`
       SELECT emergency_type, COUNT(*) as count FROM emergency_cases GROUP BY emergency_type
-    `,
-      )
-      .all();
+    `).all();
 
     res.json({
       success: true,
@@ -1038,15 +909,15 @@ exports.getEmergencyStats = (req, res) => {
         criticalCases,
         casesBySeverity,
         casesByStatus,
-        casesByType,
-      },
+        casesByType
+      }
     });
   } catch (error) {
     console.error("Error fetching emergency stats:", error.message);
     res.status(500).json({
       success: false,
       message: "Error fetching emergency statistics",
-      error: error.message,
+      error: error.message
     });
   }
 };
@@ -1060,9 +931,8 @@ exports.getEmergencyAlerts = (req, res) => {
     const { unreadOnly } = req.query;
 
     let query = "SELECT * FROM emergency_alerts ORDER BY created_at DESC";
-    if (unreadOnly === "true") {
-      query =
-        "SELECT * FROM emergency_alerts WHERE is_read = 0 ORDER BY created_at DESC";
+    if (unreadOnly === 'true') {
+      query = "SELECT * FROM emergency_alerts WHERE is_read = 0 ORDER BY created_at DESC";
     }
 
     const stmt = db.prepare(query);
@@ -1070,14 +940,14 @@ exports.getEmergencyAlerts = (req, res) => {
 
     res.json({
       success: true,
-      alerts: alerts || [],
+      alerts: alerts || []
     });
   } catch (error) {
     console.error("Error fetching alerts:", error.message);
     res.status(500).json({
       success: false,
       message: "Error fetching alerts",
-      error: error.message,
+      error: error.message
     });
   }
 };
@@ -1090,21 +960,19 @@ exports.markAlertAsRead = (req, res) => {
   try {
     const { alertId } = req.params;
 
-    const stmt = db.prepare(
-      "UPDATE emergency_alerts SET is_read = 1 WHERE alert_id = ?",
-    );
+    const stmt = db.prepare("UPDATE emergency_alerts SET is_read = 1 WHERE alert_id = ?");
     const result = stmt.run(alertId);
 
     res.json({
       success: true,
-      message: "Alert marked as read",
+      message: "Alert marked as read"
     });
   } catch (error) {
     console.error("Error marking alert as read:", error.message);
     res.status(500).json({
       success: false,
       message: "Error marking alert as read",
-      error: error.message,
+      error: error.message
     });
   }
 };

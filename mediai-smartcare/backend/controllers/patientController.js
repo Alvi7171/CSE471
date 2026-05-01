@@ -179,42 +179,85 @@ initializePatientTables();
 // ============================================
 
 /**
- * Get all patients
+ * Get all patients with appointment summary
  * GET /api/patients
  */
 exports.getAllPatients = (req, res) => {
   try {
-    const search = String(req.query.search || "").trim();
+    const stmt = db.prepare(`
+      SELECT
+        p.patient_id,
+        p.smart_patient_id,
+        p.first_name,
+        p.last_name,
+        p.phone_number,
+        p.email,
+        p.gender,
+        p.date_of_birth,
+        p.blood_type,
+        p.address,
+        p.city,
+        p.state_province,
+        p.postal_code,
+        p.country,
+        p.registration_date,
+        p.last_updated,
+        MAX(a.appointment_date) AS last_visit,
+        COUNT(a.appointment_id) AS total_appointments
+      FROM patients p
+      LEFT JOIN appointments a ON a.patient_phone = p.phone_number
+      GROUP BY
+        p.patient_id,
+        p.smart_patient_id,
+        p.first_name,
+        p.last_name,
+        p.phone_number,
+        p.email,
+        p.gender,
+        p.date_of_birth,
+        p.blood_type,
+        p.address,
+        p.city,
+        p.state_province,
+        p.postal_code,
+        p.country,
+        p.registration_date,
+        p.last_updated
+      ORDER BY p.registration_date DESC, p.patient_id DESC
+    `);
 
-    let rows;
-    if (search) {
-      const stmt = db.prepare(`
-        SELECT *
-        FROM patients
-        WHERE first_name LIKE ?
-           OR last_name LIKE ?
-           OR smart_patient_id LIKE ?
-           OR phone_number LIKE ?
-        ORDER BY registration_date DESC
-      `);
-      const pattern = `%${search}%`;
-      rows = stmt.all(pattern, pattern, pattern, pattern);
-    } else {
-      const stmt = db.prepare(`
-        SELECT *
-        FROM patients
-        ORDER BY registration_date DESC
-      `);
-      rows = stmt.all();
-    }
+    const patients = stmt.all();
 
-    return res.json({
+    const formatted = patients.map((row) => ({
+      patientId: row.patient_id,
+      smartPatientId: row.smart_patient_id,
+      name: `${row.first_name || ""} ${row.last_name || ""}`.trim(),
+      firstName: row.first_name,
+      lastName: row.last_name,
+      phone: row.phone_number,
+      email: row.email,
+      gender: row.gender,
+      dateOfBirth: row.date_of_birth,
+      bloodType: row.blood_type,
+      address: row.address,
+      city: row.city,
+      stateProvince: row.state_province,
+      postalCode: row.postal_code,
+      country: row.country,
+      registrationDate: row.registration_date,
+      lastUpdated: row.last_updated,
+      last_visit: row.last_visit || null,
+      total_appointments: Number(row.total_appointments || 0),
+    }));
+
+    res.json({
       success: true,
-      count: rows.length,
-      patients: rows,
+      count: formatted.length,
+      patients: formatted,
     });
   } catch (error) {
-    return res.status(500).json({
+    console.error("Error fetching patients:", error.message);
+    res.status(500).json({
       success: false,
       message: "Error fetching patients",
       error: error.message,
@@ -839,40 +882,103 @@ exports.getPatientTimeline = (req, res) => {
 };
 
 /**
- * Get patient timeline by phone
- * GET /api/patients/phone/:phone/timeline
+ * Get patient timeline by phone number
+ * Combines appointment history and AI symptom checks in a unified timeline.
+ * GET /api/patients/:phone/timeline
  */
 exports.getPatientTimelineByPhone = (req, res) => {
   try {
     const { phone } = req.params;
 
+    if (!phone) {
+      return res.status(400).json({
+        success: false,
+        message: "Phone number is required",
+      });
+    }
+
     const patientStmt = db.prepare(
-      "SELECT patient_id, smart_patient_id, first_name, last_name, phone_number FROM patients WHERE phone_number = ?",
+      "SELECT * FROM patients WHERE phone_number = ? LIMIT 1",
     );
     const patient = patientStmt.get(phone);
 
     if (!patient) {
       return res.status(404).json({
         success: false,
-        message: "Patient not found with this phone number",
+        message: "Patient not found",
       });
     }
 
-    const timelineStmt = db.prepare(`
-      SELECT tt.*, d.name as doctor_name
-      FROM treatment_timeline tt
-      LEFT JOIN doctors d ON tt.doctor_id = d.doctor_id
-      WHERE tt.patient_id = ?
-      ORDER BY tt.treatment_date DESC
+    const appointmentsStmt = db.prepare(`
+      SELECT
+        a.appointment_id,
+        a.appointment_date,
+        a.appointment_time,
+        a.status,
+        a.notes,
+        a.symptoms,
+        d.name AS doctor_name
+      FROM appointments a
+      LEFT JOIN doctors d ON d.doctor_id = a.doctor_id
+      WHERE a.patient_phone = ?
+      ORDER BY a.appointment_date DESC, a.appointment_time DESC
     `);
-    const timeline = timelineStmt.all(patient.patient_id);
+    const appointments = appointmentsStmt.all(phone);
+
+    const patientName = `${patient.first_name || ""} ${patient.last_name || ""}`.trim();
+    const symptomChecksStmt = db.prepare(`
+      SELECT
+        check_id,
+        symptoms,
+        predicted_diseases,
+        urgency_level,
+        check_date
+      FROM symptom_checks
+      WHERE patient_name = ?
+      ORDER BY check_date DESC
+    `);
+    const symptomChecks = patientName ? symptomChecksStmt.all(patientName) : [];
+
+    const appointmentTimeline = appointments.map((item) => ({
+      id: item.appointment_id,
+      type: "appointment",
+      date: `${item.appointment_date} ${String(item.appointment_time || "00:00:00").slice(0, 8)}`,
+      status: item.status || "pending",
+      doctorInfo: item.doctor_name || "Unknown doctor",
+      reason: item.symptoms || "",
+      notes: item.notes || "",
+    }));
+
+    const aiTimeline = symptomChecks.map((item) => ({
+      id: `symptom-${item.check_id}`,
+      type: "ai",
+      date: item.check_date,
+      symptoms: item.symptoms || "",
+      predictedDiseases: item.predicted_diseases || "[]",
+      urgency: item.urgency_level || "Low",
+    }));
+
+    const timeline = [...appointmentTimeline, ...aiTimeline].sort(
+      (left, right) => {
+        const leftTime = new Date(left.date).getTime() || 0;
+        const rightTime = new Date(right.date).getTime() || 0;
+        return rightTime - leftTime;
+      },
+    );
 
     return res.json({
       success: true,
-      patient,
+      patient: {
+        patientId: patient.patient_id,
+        smartPatientId: patient.smart_patient_id,
+        firstName: patient.first_name,
+        lastName: patient.last_name,
+        phoneNumber: patient.phone_number,
+      },
       timeline,
     });
   } catch (error) {
+    console.error("Error fetching patient timeline by phone:", error.message);
     return res.status(500).json({
       success: false,
       message: "Error fetching patient timeline",
@@ -904,7 +1010,7 @@ exports.grantDoctorAccess = (req, res) => {
         revoked_date = NULL
     `);
 
-    stmt.run(patientId, doctorId, accessLevel || "view", accessReason || null);
+    stmt.run(doctorId, patientId, accessLevel || "view", accessReason || null);
 
     res.status(201).json({
       success: true,

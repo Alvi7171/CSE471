@@ -1,11 +1,12 @@
 require("dotenv").config();
 
-console.log("USE_SQLITE:", process.env.USE_SQLITE);
-
 const fs = require("fs");
 const path = require("path");
 const bcrypt = require("bcryptjs");
-const { db } = require("./config/database");
+const { db, engine } = require("./config/database");
+const usingSqlite = engine === "sqlite";
+
+console.log("DB engine:", engine);
 
 const normalizeSqlForSqlite = (sql) =>
   String(sql || "")
@@ -14,10 +15,15 @@ const normalizeSqlForSqlite = (sql) =>
       /DATE_SUB\s*\(\s*NOW\(\)\s*,\s*INTERVAL\s+(\d+)\s+DAY\s*\)/gi,
       (_, days) => `datetime('now', '-${days} days')`,
     )
-    .replace(/\bNOW\(\)/gi, "CURRENT_TIMESTAMP");
+    .replace(/\bNOW\(\)/gi, "CURRENT_TIMESTAMP")
+    .replace(/ON UPDATE CURRENT_TIMESTAMP/gi, "")
+    .replace(/AUTO_INCREMENT/gi, "AUTOINCREMENT")
+    .replace(/TINYINT\(\d+\)/gi, "INTEGER")
+    .replace(/ENUM\([^)]+\)/gi, "TEXT")
+    .replace(/DECIMAL\(\d+,\s*\d+\)/gi, "REAL");
 
 const hasColumn = async (connection, tableName, columnName) => {
-  if (process.env.USE_SQLITE === "true") {
+  if (usingSqlite) {
     const rows = connection.prepare(`PRAGMA table_info(${tableName})`).all();
     return rows.some((row) => row.name === columnName);
   }
@@ -39,7 +45,7 @@ const hasColumn = async (connection, tableName, columnName) => {
 
 const safeExec = async (connection, sql) => {
   try {
-    if (process.env.USE_SQLITE === "true") {
+    if (usingSqlite) {
       connection.exec(sql);
     } else {
       await connection.query(sql);
@@ -62,8 +68,7 @@ const safeExec = async (connection, sql) => {
 };
 
 const run = async () => {
-  const connection =
-    process.env.USE_SQLITE === "true" ? db : await db.getConnection();
+  const connection = usingSqlite ? db : await db.getConnection();
 
   try {
     console.log("Initializing schema...");
@@ -71,7 +76,7 @@ const run = async () => {
     const schemaPath = path.join(__dirname, "models", "schema.sql");
     let schemaSQL = fs.readFileSync(schemaPath, "utf8");
 
-    if (process.env.USE_SQLITE === "true") {
+    if (usingSqlite) {
       schemaSQL = normalizeSqlForSqlite(schemaSQL);
     }
 
@@ -81,7 +86,7 @@ const run = async () => {
       .filter((stmt) => stmt.length > 0);
 
     for (const statement of statements) {
-      if (process.env.USE_SQLITE === "true") {
+      if (usingSqlite) {
         connection.exec(statement);
       } else {
         await connection.query(statement);
@@ -89,7 +94,7 @@ const run = async () => {
     }
 
     // Railway-safe incremental migration for already-created tables.
-    if (process.env.USE_SQLITE !== "true") {
+    if (!usingSqlite) {
       await safeExec(
         connection,
         "ALTER TABLE users MODIFY email VARCHAR(120) NULL",
@@ -101,6 +106,13 @@ const run = async () => {
         "ALTER TABLE users ADD COLUMN address VARCHAR(255) NULL",
       );
     }
+    if (!(await hasColumn(connection, "users", "Father_name"))) {
+      await safeExec(
+        connection,
+        "ALTER TABLE users ADD COLUMN Father_name VARCHAR(120) NULL",
+      );
+    }
+    
     if (!(await hasColumn(connection, "users", "age"))) {
       await safeExec(connection, "ALTER TABLE users ADD COLUMN age INT NULL");
     }
@@ -111,7 +123,7 @@ const run = async () => {
       );
     }
 
-    if (process.env.USE_SQLITE !== "true") {
+    if (!usingSqlite) {
       await safeExec(
         connection,
         "ALTER TABLE doctors MODIFY email VARCHAR(100) NULL",
@@ -130,7 +142,7 @@ const run = async () => {
       );
     }
 
-    if (process.env.USE_SQLITE !== "true") {
+    if (!usingSqlite) {
       await safeExec(
         connection,
         "ALTER TABLE appointments MODIFY status ENUM('pending', 'confirmed', 'declined', 'cancelled', 'completed') DEFAULT 'pending'",
@@ -153,17 +165,24 @@ const run = async () => {
 
     console.log("Schema migration complete");
 
-    // Initialize Billing & Roster schema
-    const billingRosterSchemaPath = path.join(
-      __dirname,
-      "models",
-      "billingAndRosterSchema.sql",
+    // Initialize Billing/Roster schema with backward-compatible fallback.
+    const billingRosterSchemaCandidates = usingSqlite
+      ? [
+          path.join(__dirname, "models", "billingAndRosterSchema.sql"),
+          path.join(__dirname, "models", "rosterSchema.sql"),
+        ]
+      : [
+          path.join(__dirname, "models", "rosterSchema.mysql.sql"),
+          path.join(__dirname, "models", "billingAndRosterSchema.mysql.sql"),
+        ];
+    const billingRosterSchemaPath = billingRosterSchemaCandidates.find((item) =>
+      fs.existsSync(item),
     );
 
-    if (fs.existsSync(billingRosterSchemaPath)) {
+    if (billingRosterSchemaPath) {
       let billingRosterSQL = fs.readFileSync(billingRosterSchemaPath, "utf8");
 
-      if (process.env.USE_SQLITE === "true") {
+      if (usingSqlite) {
         billingRosterSQL = normalizeSqlForSqlite(billingRosterSQL);
       }
 
@@ -174,13 +193,17 @@ const run = async () => {
 
       for (const statement of billingStatements) {
         try {
-          if (process.env.USE_SQLITE === "true") {
+          if (usingSqlite) {
             connection.exec(statement);
           } else {
             await connection.query(statement);
           }
         } catch (error) {
-          if (!String(error.message).includes("already exists")) {
+          const normalizedError = String(error.message || "");
+          if (
+            !normalizedError.includes("already exists") &&
+            !normalizedError.includes("Duplicate key name")
+          ) {
             console.error(
               "Error executing billing/roster schema statement:",
               error.message,
@@ -189,7 +212,9 @@ const run = async () => {
         }
       }
 
-      console.log("Billing & Roster schema initialized successfully");
+      console.log(
+        `Billing & Roster schema initialized successfully (${path.basename(billingRosterSchemaPath)})`,
+      );
     }
 
     const defaultUsers = [

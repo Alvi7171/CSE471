@@ -1,64 +1,7 @@
 -- =====================================================
--- BILLING & PAYMENT TRACKING MODULE
--- =====================================================
-
--- Invoices table: Consolidated bills for patients
-CREATE TABLE IF NOT EXISTS invoices (
-  invoice_id INTEGER PRIMARY KEY AUTOINCREMENT,
-  patient_user_id INTEGER NOT NULL,
-  appointment_id INTEGER,
-  invoice_number TEXT UNIQUE NOT NULL,
-  invoice_date DATE NOT NULL,
-  due_date DATE,
-  subtotal DECIMAL(12, 2) NOT NULL,
-  tax_amount DECIMAL(12, 2) DEFAULT 0,
-  discount_amount DECIMAL(12, 2) DEFAULT 0,
-  total_amount DECIMAL(12, 2) NOT NULL,
-  status TEXT DEFAULT 'draft' CHECK(status IN ('draft', 'issued', 'sent', 'pending', 'partially_paid', 'paid', 'overdue', 'cancelled')),
-  payment_method TEXT,
-  notes TEXT,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (patient_user_id) REFERENCES users(user_id) ON DELETE CASCADE,
-  FOREIGN KEY (appointment_id) REFERENCES appointments(appointment_id) ON DELETE SET NULL
-);
-
--- Invoice line items: Individual charges on an invoice
-CREATE TABLE IF NOT EXISTS invoice_items (
-  line_item_id INTEGER PRIMARY KEY AUTOINCREMENT,
-  invoice_id INTEGER NOT NULL,
-  description TEXT NOT NULL,
-  item_type TEXT NOT NULL CHECK(item_type IN ('consultation', 'diagnostic', 'lab_test', 'procedure', 'medication', 'other')),
-  quantity INTEGER DEFAULT 1,
-  unit_price DECIMAL(12, 2) NOT NULL,
-  total_price DECIMAL(12, 2) NOT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (invoice_id) REFERENCES invoices(invoice_id) ON DELETE CASCADE
-);
-
--- Payments table: Payment transactions
-CREATE TABLE IF NOT EXISTS payments (
-  payment_id INTEGER PRIMARY KEY AUTOINCREMENT,
-  invoice_id INTEGER NOT NULL,
-  patient_user_id INTEGER NOT NULL,
-  payment_date DATE NOT NULL,
-  payment_time TIME,
-  amount DECIMAL(12, 2) NOT NULL,
-  payment_method TEXT NOT NULL CHECK(payment_method IN ('credit_card', 'debit_card', 'bank_transfer', 'cash', 'check', 'insurance', 'mobile_payment')),
-  transaction_id TEXT UNIQUE,
-  status TEXT DEFAULT 'completed' CHECK(status IN ('pending', 'processing', 'completed', 'failed', 'refunded')),
-  notes TEXT,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (invoice_id) REFERENCES invoices(invoice_id) ON DELETE CASCADE,
-  FOREIGN KEY (patient_user_id) REFERENCES users(user_id) ON DELETE CASCADE
-);
-
--- =====================================================
 -- STAFF & DUTY ROSTER MANAGEMENT MODULE
 -- =====================================================
 
--- Staff members: Hospital employees (staff)
 CREATE TABLE IF NOT EXISTS staff_members (
   staff_id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER,
@@ -78,7 +21,6 @@ CREATE TABLE IF NOT EXISTS staff_members (
   FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE SET NULL
 );
 
--- Shifts: Staff shift assignments
 CREATE TABLE IF NOT EXISTS shifts (
   shift_id INTEGER PRIMARY KEY AUTOINCREMENT,
   staff_id INTEGER NOT NULL,
@@ -95,7 +37,6 @@ CREATE TABLE IF NOT EXISTS shifts (
   UNIQUE (staff_id, shift_date, shift_start_time)
 );
 
--- Attendance logs: Check-in/Check-out records
 CREATE TABLE IF NOT EXISTS attendance_logs (
   attendance_id INTEGER PRIMARY KEY AUTOINCREMENT,
   staff_id INTEGER NOT NULL,
@@ -113,7 +54,6 @@ CREATE TABLE IF NOT EXISTS attendance_logs (
   UNIQUE (staff_id, attendance_date)
 );
 
--- Staff availability: Current availability status
 CREATE TABLE IF NOT EXISTS staff_availability (
   availability_id INTEGER PRIMARY KEY AUTOINCREMENT,
   staff_id INTEGER NOT NULL UNIQUE,
@@ -125,7 +65,6 @@ CREATE TABLE IF NOT EXISTS staff_availability (
   FOREIGN KEY (updated_by) REFERENCES users(user_id) ON DELETE SET NULL
 );
 
--- Google Calendar sync logs (for Calendar API integration)
 CREATE TABLE IF NOT EXISTS calendar_sync_logs (
   sync_id INTEGER PRIMARY KEY AUTOINCREMENT,
   staff_id INTEGER,
@@ -142,10 +81,6 @@ CREATE TABLE IF NOT EXISTS calendar_sync_logs (
   FOREIGN KEY (appointment_id) REFERENCES appointments(appointment_id) ON DELETE CASCADE
 );
 
--- Create indexes for performance
-CREATE INDEX IF NOT EXISTS idx_invoices_patient_status ON invoices(patient_user_id, status);
-CREATE INDEX IF NOT EXISTS idx_invoices_date ON invoices(invoice_date);
-CREATE INDEX IF NOT EXISTS idx_payments_date ON payments(payment_date);
 CREATE INDEX IF NOT EXISTS idx_shifts_staff_date ON shifts(staff_id, shift_date);
 CREATE INDEX IF NOT EXISTS idx_shifts_department_date ON shifts(department, shift_date);
 CREATE INDEX IF NOT EXISTS idx_attendance_staff_date ON attendance_logs(staff_id, attendance_date);

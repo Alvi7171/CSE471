@@ -11,7 +11,7 @@ const adminRoutes = require("./routes/admin");
 const patientRoutes = require("./routes/patients");
 const analyticsRoutes = require("./routes/analytics");
 const notificationRoutes = require("./routes/notifications");
-const billingRoutes = require("./routes/billing");
+const prescriptionRoutes = require("./routes/prescriptions");
 const rosterRoutes = require("./routes/roster");
 const labEmergencyRoutes = require("./routes/labEmergency");
 const {
@@ -30,7 +30,7 @@ const PORT = process.env.PORT || 1355;
 app.use(
   cors({
     origin: "*", // For development; restrict in production
-    methods: ["GET", "POST", "PUT", "DELETE"],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
     credentials: true,
   }),
 );
@@ -62,6 +62,7 @@ app.get("/", (req, res) => {
       "Appointment Notifications & Reminder Delivery",
       "Patient Management & Medical Timeline",
       "Hospital Analytics Reports & Dashboard",
+      "Prescription Management & Print",
     ],
     endpoints: {
       schedule: "/api/schedule",
@@ -69,6 +70,10 @@ app.get("/", (req, res) => {
       notifications: "/api/notifications",
       patients: "/api/patients",
       analytics: "/api/analytics",
+      prescriptions: "/api/prescriptions",
+      roster: "/api/roster",
+      lab: "/api/lab",
+      emergency: "/api/emergency",
     },
     status: "Running",
   });
@@ -94,7 +99,7 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/patients", patientRoutes);
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/notifications", notificationRoutes);
-app.use("/api/billing", billingRoutes);
+app.use("/api/prescriptions", prescriptionRoutes);
 app.use("/api/roster", rosterRoutes);
 app.use("/api/lab", labEmergencyRoutes);
 app.use("/api/emergency", labEmergencyRoutes);

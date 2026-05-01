@@ -1,6 +1,7 @@
 const { query } = require("../config/database");
 const {
   DEFAULT_PREFERENCES,
+  ensureNotificationSchema,
   ensureNotificationPreference,
 } = require("../utils/notificationService");
 
@@ -29,12 +30,16 @@ const parseBooleanInput = (value, fallback) => {
 
 exports.getNotifications = async (req, res) => {
   try {
+    await ensureNotificationSchema();
+
     const limit = Math.min(100, Math.max(1, Number(req.query.limit || 20)));
     const notifications = await query(
       `
       SELECT
         notification_id,
         appointment_id,
+        related_entity_type,
+        related_entity_id,
         event_type,
         title,
         message,
@@ -83,6 +88,8 @@ exports.getNotifications = async (req, res) => {
 
 exports.getUnreadCount = async (req, res) => {
   try {
+    await ensureNotificationSchema();
+
     const rows = await query(
       `
       SELECT COUNT(*) AS unread_count
@@ -109,6 +116,8 @@ exports.getUnreadCount = async (req, res) => {
 
 exports.markAsRead = async (req, res) => {
   try {
+    await ensureNotificationSchema();
+
     const { notificationId } = req.params;
 
     const rows = await query(
@@ -158,6 +167,8 @@ exports.markAsRead = async (req, res) => {
 
 exports.markAllAsRead = async (req, res) => {
   try {
+    await ensureNotificationSchema();
+
     await query(
       `
       UPDATE notifications

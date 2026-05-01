@@ -27,13 +27,22 @@ const connectionUrl =
   process.env.DATABASE_URL ||
   process.env.MYSQL_PUBLIC_URL ||
   process.env.MYSQL_URL;
+const forceMysql = normalizeBoolean(process.env.USE_MYSQL);
+const forceSqlite = normalizeBoolean(process.env.USE_SQLITE);
 const hasExplicitMysqlConfig =
   Boolean(connectionUrl) ||
   Boolean(process.env.DB_HOST) ||
   Boolean(process.env.DB_USER) ||
   Boolean(process.env.DB_NAME);
-const useSqliteFallback =
-  normalizeBoolean(process.env.USE_SQLITE) || !hasExplicitMysqlConfig;
+const useSqliteFallback = forceMysql
+  ? false
+  : forceSqlite || !hasExplicitMysqlConfig;
+
+if (forceMysql && !hasExplicitMysqlConfig) {
+  throw new Error(
+    "USE_MYSQL=true is set, but no MySQL configuration was found. Set DATABASE_URL/MYSQL_PUBLIC_URL/MYSQL_URL or DB_HOST, DB_USER, DB_NAME.",
+  );
+}
 
 let db;
 let query;
@@ -114,7 +123,9 @@ if (useSqliteFallback) {
       CREATE TABLE IF NOT EXISTS notifications (
         notification_id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER,
-        appointment_id INTEGER NOT NULL,
+        appointment_id INTEGER,
+        related_entity_type TEXT,
+        related_entity_id INTEGER,
         recipient_role TEXT NOT NULL,
         channel TEXT NOT NULL,
         event_type TEXT NOT NULL,
@@ -134,6 +145,17 @@ if (useSqliteFallback) {
       );
     `);
 
+    ensureSqliteColumn(
+      "notifications",
+      "related_entity_type",
+      "related_entity_type TEXT",
+    );
+    ensureSqliteColumn(
+      "notifications",
+      "related_entity_id",
+      "related_entity_id INTEGER",
+    );
+
     sqliteDb.exec(`
       CREATE INDEX IF NOT EXISTS idx_appointments_patient_user
       ON appointments (patient_user_id);
@@ -143,6 +165,8 @@ if (useSqliteFallback) {
       ON notifications (status, scheduled_for);
       CREATE INDEX IF NOT EXISTS idx_notifications_appointment
       ON notifications (appointment_id);
+      CREATE INDEX IF NOT EXISTS idx_notifications_related_entity
+      ON notifications (related_entity_type, related_entity_id);
     `);
   };
 

@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS doctors (
   experience_years INT DEFAULT 0,
   consultation_fee DECIMAL(10, 2) DEFAULT 500.00,
   is_available TINYINT(1) DEFAULT 1,
+  father_name VARCHAR(120) NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
@@ -104,10 +105,12 @@ CREATE TABLE IF NOT EXISTS notification_preferences (
 CREATE TABLE IF NOT EXISTS notifications (
   notification_id INT AUTO_INCREMENT PRIMARY KEY,
   user_id INT NULL,
-  appointment_id INT NOT NULL,
+  appointment_id INT NULL,
+  related_entity_type VARCHAR(60) NULL,
+  related_entity_id INT NULL,
   recipient_role ENUM('patient', 'doctor', 'admin') NOT NULL,
   channel ENUM('portal', 'email') NOT NULL,
-  event_type ENUM('confirmation', 'reminder', 'cancellation', 'update') NOT NULL,
+  event_type ENUM('confirmation', 'reminder', 'cancellation', 'update', 'prescription', 'appointment_rescheduled') NOT NULL,
   title VARCHAR(180) NOT NULL,
   message TEXT NOT NULL,
   email_address VARCHAR(180) NULL,
@@ -124,5 +127,6 @@ CREATE TABLE IF NOT EXISTS notifications (
   UNIQUE KEY unique_notification_dedupe_key (dedupe_key),
   INDEX idx_notifications_user_channel_status (user_id, channel, status),
   INDEX idx_notifications_scheduled (status, scheduled_for),
-  INDEX idx_notifications_appointment (appointment_id)
+  INDEX idx_notifications_appointment (appointment_id),
+  INDEX idx_notifications_related_entity (related_entity_type, related_entity_id)
 );
