@@ -1,12 +1,24 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { symptomAPI } from "../services/api";
 
-const SymptomChecker = () => {
+const buildProfileDefaults = (currentUser) => ({
+  patientName: currentUser?.fullName || "",
+  age:
+    currentUser?.age === undefined || currentUser?.age === null
+      ? ""
+      : String(currentUser.age),
+  gender: currentUser?.gender || "",
+  symptoms: "",
+});
+
+const SymptomChecker = ({ currentUser }) => {
+  const profileDefaults = useMemo(
+    () => buildProfileDefaults(currentUser),
+    [currentUser?.age, currentUser?.fullName, currentUser?.gender],
+  );
+
   const [formData, setFormData] = useState({
-    patientName: "",
-    age: "",
-    gender: "",
-    symptoms: "",
+    ...profileDefaults,
   });
 
   const [result, setResult] = useState(null);
@@ -14,6 +26,15 @@ const SymptomChecker = () => {
   const [error, setError] = useState(null);
   const [history, setHistory] = useState([]);
   const [showHistory, setShowHistory] = useState(false);
+
+  useEffect(() => {
+    setFormData((prev) => ({
+      ...prev,
+      patientName: profileDefaults.patientName,
+      age: profileDefaults.age,
+      gender: profileDefaults.gender,
+    }));
+  }, [profileDefaults]);
 
   const handleChange = (e) => {
     setFormData({
@@ -30,9 +51,9 @@ const SymptomChecker = () => {
 
     try {
       const response = await symptomAPI.checkSymptoms({
-        patientName: formData.patientName || "Anonymous",
-        age: formData.age ? parseInt(formData.age) : null,
-        gender: formData.gender || null,
+        patientName: formData.patientName || currentUser?.fullName || "Anonymous",
+        age: formData.age ? parseInt(formData.age, 10) : currentUser?.age || null,
+        gender: formData.gender || currentUser?.gender || null,
         symptoms: formData.symptoms,
       });
 
@@ -49,8 +70,10 @@ const SymptomChecker = () => {
 
   const loadHistory = async () => {
     try {
-      const response = await symptomAPI.getHistory();
-      setHistory(response.data);
+      const historyOwner =
+        currentUser?.fullName || formData.patientName || null;
+      const response = await symptomAPI.getHistory(historyOwner);
+      setHistory(response.data || []);
       setShowHistory(true);
     } catch (err) {
       setError("Failed to load history");
@@ -74,9 +97,7 @@ const SymptomChecker = () => {
 
   const resetForm = () => {
     setFormData({
-      patientName: "",
-      age: "",
-      gender: "",
+      ...profileDefaults,
       symptoms: "",
     });
     setResult(null);
@@ -94,6 +115,10 @@ const SymptomChecker = () => {
             <p className="text-gray-600">
               Get instant AI-powered health assessment and specialist
               recommendations
+            </p>
+            <p className="text-xs text-gray-500 mt-2">
+              Your profile details are pre-filled to keep symptom records
+              consistent.
             </p>
           </div>
           <button onClick={loadHistory} className="btn-secondary text-sm">
@@ -116,6 +141,11 @@ const SymptomChecker = () => {
                 placeholder="Enter name"
                 className="input-field"
               />
+              {currentUser?.fullName && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Defaulted from your patient profile.
+                </p>
+              )}
             </div>
 
             <div>
