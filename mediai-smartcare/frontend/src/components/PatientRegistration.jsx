@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
+import { API_BASE_URL } from "../services/api";
 
 function PatientRegistration() {
   const [formData, setFormData] = useState({
@@ -77,7 +78,7 @@ function PatientRegistration() {
     try {
       console.log("📤 Sending registration request:", formData);
       const response = await axios.post(
-        "http://localhost:1355/api/patients/register",
+        `${API_BASE_URL}/patients/register`,
         formData,
       );
 

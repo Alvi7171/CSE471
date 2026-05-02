@@ -1,7 +1,12 @@
 import axios from "axios";
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:1355/api";
+const normalizeApiUrl = (url) => String(url || "").replace(/\/+$/, "");
+
+export const API_BASE_URL = normalizeApiUrl(
+  import.meta.env.VITE_API_BASE_URL ||
+    import.meta.env.VITE_API_URL ||
+    "http://localhost:1355/api",
+);
 
 const TOKEN_KEY = "mediai_token";
 

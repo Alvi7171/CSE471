@@ -23,6 +23,7 @@ const app = express();
 
 // Port configuration (last 4 digits of student ID: 23201355)
 const PORT = process.env.PORT || 1355;
+const isProduction = (process.env.NODE_ENV || "development") === "production";
 
 // ============================================
 // Middleware Configuration
@@ -130,18 +131,22 @@ app.use((err, req, res, next) => {
 // ============================================
 // Server Initialization
 // ============================================
+const ensureRuntimeConfig = () => {
+  if (!process.env.JWT_SECRET) {
+    if (isProduction) {
+      throw new Error("JWT_SECRET is required in environment variables");
+    }
+
+    process.env.JWT_SECRET = "dev-only-jwt-secret-change-me";
+    console.warn(
+      "JWT_SECRET not set. Using temporary development secret. Add JWT_SECRET to .env for production.",
+    );
+  }
+};
+
 const startServer = async () => {
   try {
-    if (!process.env.JWT_SECRET) {
-      if ((process.env.NODE_ENV || "development") === "production") {
-        throw new Error("JWT_SECRET is required in environment variables");
-      }
-
-      process.env.JWT_SECRET = "dev-only-jwt-secret-change-me";
-      console.warn(
-        "JWT_SECRET not set. Using temporary development secret. Add JWT_SECRET to .env for production.",
-      );
-    }
+    ensureRuntimeConfig();
 
     // Test database connection
     console.log("🔄 Testing database connection...");
@@ -200,7 +205,12 @@ const startServer = async () => {
   }
 };
 
-// Start the server
-startServer();
+ensureRuntimeConfig();
+
+if (require.main === module) {
+  startServer();
+}
 
 module.exports = app;
+module.exports.ensureRuntimeConfig = ensureRuntimeConfig;
+module.exports.startServer = startServer;
