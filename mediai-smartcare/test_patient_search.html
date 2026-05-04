@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Patient Search Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+        .test-section { margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 8px; background: white; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        .warning { background-color: #fff3cd; border-color: #ffeaa7; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; max-height: 300px; }
+        button { background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin: 5px; }
+        button:hover { background: #0056b3; }
+        input { padding: 8px; border: 1px solid #ddd; border-radius: 4px; margin: 5px; }
+        .suggestion { padding: 10px; border: 1px solid #ddd; margin: 5px 0; cursor: pointer; border-radius: 4px; }
+        .suggestion:hover { background: #f0f0f0; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Patient Search Test</h1>
+    
+    <div class="test-section info">
+        <h2>Purpose</h2>
+        <p>This test page checks if the patient search functionality is working properly:</p>
+        <ul>
+            <li>✅ Test API endpoints for patient search</li>
+            <li>✅ Verify authentication is working</li>
+            <li>✅ Check export functionality (CSV/JSON)</li>
+            <li>✅ Test search suggestions and dropdown</li>
+        </ul>
+    </div>
+
+    <div class="test-section">
+        <h2>API Endpoint Tests</h2>
+        
+        <div>
+            <input type="text" id="searchQuery" placeholder="Enter patient name or ID..." value="John">
+            <button onclick="testSearch()">🔍 Test Search</button>
+            <button onclick="testStatistics()">📊 Test Statistics</button>
+            <button onclick="testRecentlyActive()">🔄 Test Recently Active</button>
+        </div>
+        
+        <div id="testResult" style="margin-top: 10px;"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Export Functionality Test</h2>
+        <p>The export buttons are used to download patient data in different formats:</p>
+        
+        <div>
+            <button onclick="testExport('csv')">📊 Export CSV</button>
+            <button onclick="testExport('json')">📄 Export JSON</button>
+        </div>
+        
+        <div id="exportResult" style="margin-top: 10px;"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Search Suggestions Test</h2>
+        <p>Test real-time search suggestions:</p>
+        
+        <div>
+            <input type="text" id="suggestionQuery" placeholder="Type to see suggestions..." oninput="getSuggestions(this.value)">
+            <button onclick="clearSuggestions()">Clear</button>
+        </div>
+        
+        <div id="suggestions" style="margin-top: 10px;"></div>
+    </div>
+
+    <div class="test-section warning">
+        <h2>📋 Export Button Explanation</h2>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+            <div>
+                <h3>📊 Export CSV Button</h3>
+                <p><strong>Purpose:</strong> Download patient data as CSV file</p>
+                <p><strong>Use Case:</strong> Import into Excel, Google Sheets, or data analysis tools</p>
+                <p><strong>Format:</strong> Comma-separated values with headers</p>
+                <p><strong>File Name:</strong> patients_YYYY-MM-DD.csv</p>
+            </div>
+            <div>
+                <h3>📄 Export JSON Button</h3>
+                <p><strong>Purpose:</strong> Download patient data as JSON file</p>
+                <p><strong>Use Case:</strong> Import into other systems, backup, or API integration</p>
+                <p><strong>Format:</strong> Structured JSON with nested data</p>
+                <p><strong>File Name:</strong> patients_YYYY-MM-DD.json</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = "http://localhost:1355/api";
+
+        async function testSearch() {
+            const query = document.getElementById('searchQuery').value;
+            const resultDiv = document.getElementById('testResult');
+            
+            if (!query) {
+                resultDiv.innerHTML = '<div class="error">Please enter a search query</div>';
+                return;
+            }
+
+            resultDiv.innerHTML = '<div class="info">Testing patient search...</div>';
+            
+            try {
+                const response = await axios.get(`${API_BASE}/patients/search?query=${encodeURIComponent(query)}&limit=5`);
+                
+                resultDiv.innerHTML = `
+                    <div class="success">
+                        <h3>✅ Search Working</h3>
+                        <p><strong>Status:</strong> ${response.status}</p>
+                        <p><strong>Results Found:</strong> ${response.data.data?.length || 0}</p>
+                        <p><strong>Total Results:</strong> ${response.data.pagination?.totalResults || 0}</p>
+                        <pre>${JSON.stringify(response.data, null, 2)}</pre>
+                    </div>
+                `;
+            } catch (error) {
+                if (error.response?.status === 401) {
+                    resultDiv.innerHTML = `
+                        <div class="info">
+                            <h3>🔒 Authentication Required</h3>
+                            <p>The search API is properly protected with authentication.</p>
+                            <p><strong>Status:</strong> ${error.response.status}</p>
+                            <p><strong>Message:</strong> ${error.response.data.message}</p>
+                            <p><strong>✅ This is expected behavior!</strong></p>
+                            <p>You need to be logged in as a doctor or admin to use patient search.</p>
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="error">
+                            <h3>❌ Search Error</h3>
+                            <p><strong>Status:</strong> ${error.response?.status || 'Network Error'}</p>
+                            <p><strong>Error:</strong> ${error.response?.data?.message || error.message}</p>
+                            <pre>${JSON.stringify(error.response?.data, null, 2)}</pre>
+                        </div>
+                    `;
+                }
+            }
+        }
+
+        async function testStatistics() {
+            const resultDiv = document.getElementById('testResult');
+            
+            resultDiv.innerHTML = '<div class="info">Testing statistics...</div>';
+            
+            try {
+                const response = await axios.get(`${API_BASE}/patients/statistics`);
+                
+                resultDiv.innerHTML = `
+                    <div class="success">
+                        <h3>✅ Statistics Working</h3>
+                        <p><strong>Status:</strong> ${response.status}</p>
+                        <p><strong>Total Patients:</strong> ${response.data.data?.totalPatients || 0}</p>
+                        <pre>${JSON.stringify(response.data, null, 2)}</pre>
+                    </div>
+                `;
+            } catch (error) {
+                if (error.response?.status === 401) {
+                    resultDiv.innerHTML = `
+                        <div class="info">
+                            <h3>🔒 Authentication Required</h3>
+                            <p>Statistics API requires authentication (doctor/admin only).</p>
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="error">
+                            <h3>❌ Statistics Error</h3>
+                            <p><strong>Error:</strong> ${error.response?.data?.message || error.message}</p>
+                        </div>
+                    `;
+                }
+            }
+        }
+
+        async function testRecentlyActive() {
+            const resultDiv = document.getElementById('testResult');
+            
+            resultDiv.innerHTML = '<div class="info">Testing recently active patients...</div>';
+            
+            try {
+                const response = await axios.get(`${API_BASE}/patients/recently-active?days=30&limit=5`);
+                
+                resultDiv.innerHTML = `
+                    <div class="success">
+                        <h3>✅ Recently Active Working</h3>
+                        <p><strong>Status:</strong> ${response.status}</p>
+                        <p><strong>Active Patients:</strong> ${response.data.data?.length || 0}</p>
+                        <pre>${JSON.stringify(response.data, null, 2)}</pre>
+                    </div>
+                `;
+            } catch (error) {
+                if (error.response?.status === 401) {
+                    resultDiv.innerHTML = `
+                        <div class="info">
+                            <h3>🔒 Authentication Required</h3>
+                            <p>Recently active API requires authentication (doctor/admin only).</p>
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="error">
+                            <h3>❌ Recently Active Error</h3>
+                            <p><strong>Error:</strong> ${error.response?.data?.message || error.message}</p>
+                        </div>
+                    `;
+                }
+            }
+        }
+
+        async function testExport(format) {
+            const resultDiv = document.getElementById('exportResult');
+            
+            resultDiv.innerHTML = `<div class="info">Testing ${format.toUpperCase()} export...</div>`;
+            
+            try {
+                const response = await axios.post(`${API_BASE}/patients/export`, {
+                    format: format,
+                    searchCriteria: {}
+                }, {
+                    responseType: format === 'csv' ? 'blob' : 'json'
+                });
+
+                if (format === 'csv') {
+                    const url = window.URL.createObjectURL(new Blob([response.data]));
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = `patients_test_${new Date().toISOString().split('T')[0]}.csv`;
+                    link.click();
+                    window.URL.revokeObjectURL(url);
+                    
+                    resultDiv.innerHTML = `
+                        <div class="success">
+                            <h3>✅ CSV Export Working</h3>
+                            <p>CSV file downloaded successfully!</p>
+                            <p><strong>File:</strong> patients_test_${new Date().toISOString().split('T')[0]}.csv</p>
+                        </div>
+                    `;
+                } else {
+                    const dataStr = JSON.stringify(response.data, null, 2);
+                    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+                    const url = window.URL.createObjectURL(dataBlob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = `patients_test_${new Date().toISOString().split('T')[0]}.json`;
+                    link.click();
+                    window.URL.revokeObjectURL(url);
+                    
+                    resultDiv.innerHTML = `
+                        <div class="success">
+                            <h3>✅ JSON Export Working</h3>
+                            <p>JSON file downloaded successfully!</p>
+                            <p><strong>File:</strong> patients_test_${new Date().toISOString().split('T')[0]}.json</p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                if (error.response?.status === 401) {
+                    resultDiv.innerHTML = `
+                        <div class="info">
+                            <h3>🔒 Authentication Required</h3>
+                            <p>Export API requires authentication (doctor/admin only).</p>
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="error">
+                            <h3>❌ Export Error</h3>
+                            <p><strong>Error:</strong> ${error.response?.data?.message || error.message}</p>
+                        </div>
+                    `;
+                }
+            }
+        }
+
+        async function getSuggestions(query) {
+            const suggestionsDiv = document.getElementById('suggestions');
+            
+            if (query.length < 2) {
+                suggestionsDiv.innerHTML = '';
+                return;
+            }
+
+            try {
+                const response = await axios.get(`${API_BASE}/patients/search?query=${encodeURIComponent(query)}&limit=5`);
+                
+                if (response.data.data && response.data.data.length > 0) {
+                    suggestionsDiv.innerHTML = response.data.data.map(patient => `
+                        <div class="suggestion" onclick="selectPatient('${patient.first_name} ${patient.last_name}', ${patient.patient_id})">
+                            <strong>${patient.first_name} ${patient.last_name}</strong><br>
+                            <small>ID: ${patient.smart_patient_id} | Phone: ${patient.phone_number}</small>
+                        </div>
+                    `).join('');
+                } else {
+                    suggestionsDiv.innerHTML = '<p style="color: #666;">No suggestions found</p>';
+                }
+            } catch (error) {
+                suggestionsDiv.innerHTML = '<p style="color: red;">Error loading suggestions</p>';
+            }
+        }
+
+        function selectPatient(name, patientId) {
+            document.getElementById('suggestionQuery').value = name;
+            document.getElementById('suggestions').innerHTML = '';
+            alert(`Selected patient: ${name} (ID: ${patientId})`);
+        }
+
+        function clearSuggestions() {
+            document.getElementById('suggestionQuery').value = '';
+            document.getElementById('suggestions').innerHTML = '';
+        }
+
+        // Auto-test on page load
+        window.onload = function() {
+            setTimeout(testSearch, 1000);
+        };
+    </script>
+</body>
+</html>

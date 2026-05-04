@@ -246,9 +246,12 @@ function EmergencyResponse({ currentUser, targetEmergencyId, clearTargetEmergenc
             </div>
             <div className="flex items-center gap-4">
               {alerts.length > 0 && (
-                <div className="bg-red-100 text-red-700 px-4 py-2 rounded-full font-semibold animate-pulse">
+                <button
+                  onClick={() => setActiveTab("cases")}
+                  className="bg-red-100 text-red-700 px-4 py-2 rounded-full font-semibold animate-pulse hover:bg-red-200 transition-colors cursor-pointer"
+                >
                   🔔 {alerts.length} New Alerts
-                </div>
+                </button>
               )}
               <button
                 onClick={() => setShowNewEmergencyForm(true)}

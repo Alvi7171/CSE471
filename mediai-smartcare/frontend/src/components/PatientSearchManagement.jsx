@@ -9,6 +9,8 @@ function PatientSearchManagement() {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalResults, setTotalResults] = useState(0);
+  const [searchSuggestions, setSearchSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
   // Search filters state
   const [searchFilters, setSearchFilters] = useState({
@@ -43,6 +45,7 @@ function PatientSearchManagement() {
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [showStatistics, setShowStatistics] = useState(false);
+  const [activeTab, setActiveTab] = useState("visits");
 
   useEffect(() => {
     loadStatistics();
@@ -75,11 +78,39 @@ function PatientSearchManagement() {
     }
   };
 
+  // Handle real-time search suggestions
+  const handleSearchSuggestions = async (query) => {
+    if (query.length < 2) {
+      setSearchSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+
+    try {
+      const response = await api.get("/patients/search", { 
+        params: { 
+          query: query,
+          limit: 5,
+          sortBy: "last_updated",
+          sortOrder: "DESC"
+        } 
+      });
+      
+      setSearchSuggestions(response.data.data || []);
+      setShowSuggestions(true);
+    } catch (err) {
+      console.error("Failed to get search suggestions:", err);
+      setSearchSuggestions([]);
+      setShowSuggestions(false);
+    }
+  };
+
   // Handle search
   const handleSearch = async (page = 1) => {
     try {
       setLoading(true);
       setError("");
+      setShowSuggestions(false);
       
       const params = new URLSearchParams();
       
@@ -174,14 +205,27 @@ function PatientSearchManagement() {
     }
   };
 
-  // Get patient dashboard
+  // Get patient dashboard and medical timeline
   const viewPatientDashboard = async (patient) => {
     try {
-      const response = await api.get(`/patients/${patient.patient_id}/dashboard`);
-      setSelectedPatient(response.data.data);
+      setLoading(true);
+      // Use the correct endpoint to get complete medical history
+      const response = await api.get(`/patients/${patient.patient_id}/complete-history`);
+      
+      if (response.data.success) {
+        // Store patient data with medical history
+        setSelectedPatient({
+          ...patient,
+          medicalHistory: response.data.medicalHistory
+        });
+      } else {
+        setError("Failed to load patient medical history.");
+      }
     } catch (err) {
       setError("Failed to load patient dashboard.");
       console.error(err);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -278,15 +322,59 @@ function PatientSearchManagement() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {/* Basic Search */}
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-2 relative">
             <input
               type="text"
               placeholder="Quick search by name, phone, email, or patient ID..."
               value={searchFilters.query}
-              onChange={(e) => handleFilterChange('query', e.target.value)}
+              onChange={(e) => {
+                handleFilterChange('query', e.target.value);
+                handleSearchSuggestions(e.target.value);
+              }}
               onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+              onFocus={() => searchFilters.query.length >= 2 && setShowSuggestions(true)}
+              onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
+            
+            {/* Search Suggestions Dropdown */}
+            {showSuggestions && searchSuggestions.length > 0 && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
+                {searchSuggestions.map((patient) => (
+                  <div
+                    key={patient.patient_id}
+                    onClick={() => {
+                      setSearchFilters({ ...searchFilters, query: `${patient.first_name} ${patient.last_name}` });
+                      setShowSuggestions(false);
+                      viewPatientDashboard(patient);
+                    }}
+                    className="px-4 py-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                  >
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="font-semibold text-gray-800">
+                          {patient.first_name} {patient.last_name}
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          {patient.smart_patient_id}
+                        </div>
+                        <div className="text-sm text-gray-500">
+                          📱 {patient.phone_number}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
+                          {patient.total_visits} visits
+                        </div>
+                        <div className="text-xs text-gray-500 mt-1">
+                          {patient.gender}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <select
@@ -560,14 +648,14 @@ function PatientSearchManagement() {
         </div>
       )}
 
-      {/* Patient Dashboard Modal */}
+      {/* Patient Medical Timeline Modal */}
       {selectedPatient && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-screen overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-screen overflow-y-auto">
             <div className="sticky top-0 bg-white border-b border-gray-200 p-6 rounded-t-2xl">
               <div className="flex justify-between items-center">
                 <h2 className="text-2xl font-bold text-gray-800">
-                  📋 Patient Dashboard - {selectedPatient.patient.first_name} {selectedPatient.patient.last_name}
+                  📋 Medical Timeline - {selectedPatient.first_name} {selectedPatient.last_name}
                 </h2>
                 <button
                   onClick={() => setSelectedPatient(null)}
@@ -579,35 +667,148 @@ function PatientSearchManagement() {
             </div>
             
             <div className="p-6">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Patient Info */}
-                <div className="space-y-4">
-                  <div className="bg-blue-50 p-4 rounded-lg">
+              {selectedPatient.medicalHistory ? (
+                <>
+                  {/* Patient Info */}
+                  <div className="bg-blue-50 p-4 rounded-lg mb-6">
                     <h3 className="font-bold text-blue-800 mb-2">Patient Information</h3>
-                    <div className="space-y-2 text-sm">
-                      <div><strong>ID:</strong> {selectedPatient.patient.smart_patient_id}</div>
-                      <div><strong>Phone:</strong> {selectedPatient.patient.phone_number}</div>
-                      <div><strong>Email:</strong> {selectedPatient.patient.email || 'N/A'}</div>
-                      <div><strong>Age:</strong> {selectedPatient.patient.date_of_birth}</div>
-                      <div><strong>Gender:</strong> {selectedPatient.patient.gender}</div>
-                      <div><strong>Blood Type:</strong> {selectedPatient.patient.blood_type || 'N/A'}</div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                      <div><strong>Smart ID:</strong> {selectedPatient.medicalHistory.patient.smart_patient_id}</div>
+                      <div><strong>Phone:</strong> {selectedPatient.medicalHistory.patient.phone_number}</div>
+                      <div><strong>Age:</strong> {selectedPatient.medicalHistory.patient.date_of_birth}</div>
+                      <div><strong>Gender:</strong> {selectedPatient.medicalHistory.patient.gender}</div>
                     </div>
                   </div>
-                </div>
 
-                {/* Stats */}
-                <div className="space-y-4">
-                  <div className="bg-green-50 p-4 rounded-lg">
-                    <h3 className="font-bold text-green-800 mb-2">Visit Statistics</h3>
-                    <div className="space-y-2 text-sm">
-                      <div><strong>Total Visits:</strong> {selectedPatient.visitStats.total_visits}</div>
-                      <div><strong>Completed:</strong> {selectedPatient.visitStats.completed_visits}</div>
-                      <div><strong>Cancelled:</strong> {selectedPatient.visitStats.cancelled_visits}</div>
-                      <div><strong>Last Visit:</strong> {selectedPatient.visitStats.last_visit_date}</div>
+                  {/* Medical Summary */}
+                  <div className="bg-green-50 p-4 rounded-lg mb-6">
+                    <h3 className="font-bold text-green-800 mb-2">Medical Summary</h3>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                      <div>
+                        <div className="text-2xl font-bold text-blue-600">{selectedPatient.medicalHistory.visits?.length || 0}</div>
+                        <div className="text-sm text-gray-600">Medical Visits</div>
+                      </div>
+                      <div>
+                        <div className="text-2xl font-bold text-green-600">{selectedPatient.medicalHistory.prescriptions?.length || 0}</div>
+                        <div className="text-sm text-gray-600">Prescriptions</div>
+                      </div>
+                      <div>
+                        <div className="text-2xl font-bold text-purple-600">{selectedPatient.medicalHistory.diagnosticReports?.length || 0}</div>
+                        <div className="text-sm text-gray-600">Lab Reports</div>
+                      </div>
+                      <div>
+                        <div className="text-2xl font-bold text-orange-600">{selectedPatient.medicalHistory.labTests?.length || 0}</div>
+                        <div className="text-sm text-gray-600">Lab Tests</div>
+                      </div>
                     </div>
                   </div>
+
+                  {/* Medical Timeline Tabs */}
+                  <div className="border-b border-gray-200 mb-6">
+                    <nav className="-mb-px flex space-x-8">
+                      {['visits', 'prescriptions', 'labTests', 'diagnosticReports'].map((tab) => (
+                        <button
+                          key={tab}
+                          onClick={() => setActiveTab(tab)}
+                          className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                            activeTab === tab
+                              ? 'border-blue-500 text-blue-600'
+                              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                          }`}
+                        >
+                          {tab === 'visits' && '📅 Medical Visits'}
+                          {tab === 'prescriptions' && '💊 Prescriptions'}
+                          {tab === 'labTests' && '🔬 Lab Tests'}
+                          {tab === 'diagnosticReports' && '📋 Reports'}
+                        </button>
+                      ))}
+                    </nav>
+                  </div>
+
+                  {/* Tab Content */}
+                  <div className="space-y-4">
+                    {activeTab === 'visits' && (
+                      <div>
+                        {selectedPatient.medicalHistory.visits?.length > 0 ? (
+                          selectedPatient.medicalHistory.visits.map((visit) => (
+                            <div key={visit.visit_id} className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                              <h4 className="font-bold text-blue-800">{visit.visit_reason}</h4>
+                              <p className="text-sm text-gray-600">{visit.visit_date}</p>
+                              <p className="text-sm text-gray-700 mt-2">{visit.notes}</p>
+                              <p className="text-sm text-gray-600">Doctor: {visit.doctor_name}</p>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="text-center py-8 text-gray-500">
+                            <p>No medical visits found</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {activeTab === 'prescriptions' && (
+                      <div>
+                        {selectedPatient.medicalHistory.prescriptions?.length > 0 ? (
+                          selectedPatient.medicalHistory.prescriptions.map((prescription) => (
+                            <div key={prescription.prescription_id} className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+                              <h4 className="font-bold text-green-800">{prescription.medication_name}</h4>
+                              <p className="text-sm text-gray-600">{prescription.prescription_date}</p>
+                              <p className="text-sm text-gray-700">{prescription.dosage} - {prescription.frequency}</p>
+                              <p className="text-sm text-gray-600">Doctor: {prescription.doctor_name}</p>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="text-center py-8 text-gray-500">
+                            <p>No prescriptions found</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {activeTab === 'labTests' && (
+                      <div>
+                        {selectedPatient.medicalHistory.labTests?.length > 0 ? (
+                          selectedPatient.medicalHistory.labTests.map((test) => (
+                            <div key={test.test_id} className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-4">
+                              <h4 className="font-bold text-purple-800">{test.test_name}</h4>
+                              <p className="text-sm text-gray-600">{test.request_date}</p>
+                              <p className="text-sm text-gray-700">{test.test_type}</p>
+                              {test.is_delivered && <p className="text-sm text-green-600">Report Delivered</p>}
+                            </div>
+                          ))
+                        ) : (
+                          <div className="text-center py-8 text-gray-500">
+                            <p>No lab tests found</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {activeTab === 'diagnosticReports' && (
+                      <div>
+                        {selectedPatient.medicalHistory.diagnosticReports?.length > 0 ? (
+                          selectedPatient.medicalHistory.diagnosticReports.map((report) => (
+                            <div key={report.report_id} className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                              <h4 className="font-bold text-yellow-800">{report.test_name}</h4>
+                              <p className="text-sm text-gray-600">{report.report_date}</p>
+                              <p className="text-sm text-gray-700">{report.findings}</p>
+                              <p className="text-sm text-gray-600">Doctor: {report.doctor_name}</p>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="text-center py-8 text-gray-500">
+                            <p>No diagnostic reports found</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <p>Loading medical history...</p>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         </div>
