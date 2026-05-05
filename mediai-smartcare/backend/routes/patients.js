@@ -36,13 +36,10 @@ router.get("/phone/:phone/timeline", requireAuth, requireRole("doctor", "admin")
  */
 router.post("/register", requireAuth, requireRole("admin"), patientController.registerPatient);
 
-<<<<<<< HEAD
 // ============================================
 // PATIENT RETRIEVAL & UPDATE
 // ============================================
 
-=======
->>>>>>> origin/main
 /**
  * @route   GET /api/patients/:patientId
  * @desc    Get patient information by Smart Patient ID or Patient ID

@@ -15,12 +15,12 @@ import EmergencyResponse from "./components/EmergencyResponse";
 import DoctorsList from "./components/DoctorsList";
 import PatientLabReports from "./components/PatientLabReports";
 import InventoryManagement from "./components/InventoryManagement";
-import BedAllocationDashboard from "./components/BedAllocationDashboard";
+
 import PatientDocuments from "./components/PatientDocuments";
 import PatientPortalSummary from "./components/PatientPortalSummary";
 import ProfileEditorModal from "./components/ProfileEditorModal";
 import RosterManagement from "./components/RosterManagement";
-import DoctorPortalSummary from "./components/DoctorPortalSummary";
+
 import "./index.css";
 import { authAPI } from "./services/api";
 import { formatRoleUserId, getUserDisplayName } from "./utils/identity";
@@ -49,7 +49,6 @@ const roleTabs = {
     { key: "booking", label: "Book Appointment" },
     { key: "doctors", label: "Doctors List" },
     { key: "labreports", label: "🧪 Lab Reports" },
-    { key: "timeline", label: "Patient Records" },
     { key: "documents", label: "My Prescriptions" },
   ],
   doctor: [

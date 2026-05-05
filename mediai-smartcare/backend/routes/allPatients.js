@@ -16,8 +16,8 @@ router.get("/", (req, res) => {
     // Get all patients from unified table (includes all sources)
     const allPatients = db.prepare(`
       SELECT patient_id, smart_patient_id, first_name, last_name, gender, 
-             blood_type, phone_number, email, registration_date, source
-      FROM unified_patients 
+             blood_type, phone_number, email, registration_date, 'registered' as source
+      FROM patients 
       ORDER BY registration_date DESC
     `).all();
 
@@ -81,7 +81,7 @@ router.delete("/:patientId", (req, res) => {
 
     // Get patient info before deletion for logging
     const patientInfo = db.prepare(`
-      SELECT * FROM unified_patients WHERE patient_id = ?
+      SELECT *, 'registered' as source FROM patients WHERE patient_id = ?
     `).get(patientId);
 
     if (!patientInfo) {
@@ -125,12 +125,6 @@ router.delete("/:patientId", (req, res) => {
       const result = db.prepare('DELETE FROM emergency_cases WHERE emergency_id = ?').run(patientId);
       if (result.changes > 0) deletedFrom.push('emergency_cases');
     }
-
-    // Finally delete from unified_patients table
-    const unifiedResult = db.prepare('DELETE FROM unified_patients WHERE patient_id = ?').run(patientId);
-    if (unifiedResult.changes > 0) deletedFrom.push('unified_patients');
-
-    console.log(`Successfully deleted patient ${patientId} from: ${deletedFrom.join(', ')}`);
 
     res.json({
       success: true,

@@ -44,18 +44,18 @@ exports.searchPatients = (req, res) => {
     // Build dynamic WHERE clause
     if (query) {
       whereConditions.push(`
-        (first_name LIKE ? OR 
-         last_name LIKE ? OR 
-         smart_patient_id LIKE ? OR 
-         phone_number LIKE ? OR 
-         email LIKE ?)
+        (patients.first_name LIKE ? OR 
+         patients.last_name LIKE ? OR 
+         patients.smart_patient_id LIKE ? OR 
+         patients.phone_number LIKE ? OR 
+         patients.email LIKE ?)
       `);
       const searchTerm = `%${query}%`;
       params.push(searchTerm, searchTerm, searchTerm, searchTerm, searchTerm);
     }
 
     if (patientId) {
-      whereConditions.push("(patient_id = ? OR smart_patient_id = ?)");
+      whereConditions.push("(patients.patient_id = ? OR patients.smart_patient_id = ?)");
       params.push(patientId, patientId);
     }
 
@@ -104,29 +104,26 @@ exports.searchPatients = (req, res) => {
       params.push(registrationDateTo);
     }
 
-    // Join with appointments for last visit filter
-    let joinClause = "";
-    if (lastVisitFrom || lastVisitTo || department) {
-      joinClause = `
-        LEFT JOIN (
-          SELECT 
-            patient_id,
-            MAX(visit_date) as last_visit_date,
-            COUNT(*) as total_visits
-          FROM medical_visits 
-          GROUP BY patient_id
-        ) latest_visits ON patients.patient_id = latest_visits.patient_id
-      `;
-      
-      if (lastVisitFrom) {
-        whereConditions.push("latest_visits.last_visit_date >= ?");
-        params.push(lastVisitFrom);
-      }
-      
-      if (lastVisitTo) {
-        whereConditions.push("latest_visits.last_visit_date <= ?");
-        params.push(lastVisitTo);
-      }
+    // Always join with medical_visits to get last visit info
+    let joinClause = `
+      LEFT JOIN (
+        SELECT 
+          patient_id,
+          MAX(visit_date) as last_visit_date,
+          COUNT(*) as total_visits
+        FROM medical_visits 
+        GROUP BY patient_id
+      ) latest_visits ON patients.patient_id = latest_visits.patient_id
+    `;
+    
+    if (lastVisitFrom) {
+      whereConditions.push("latest_visits.last_visit_date >= ?");
+      params.push(lastVisitFrom);
+    }
+    
+    if (lastVisitTo) {
+      whereConditions.push("latest_visits.last_visit_date <= ?");
+      params.push(lastVisitTo);
     }
 
     if (hasChronicDiseases === 'true') {
@@ -157,38 +154,38 @@ exports.searchPatients = (req, res) => {
     // Main search query
     const searchQuery = `
       SELECT 
-        patient_id,
-        smart_patient_id,
-        first_name,
-        last_name,
-        date_of_birth,
-        gender,
-        blood_type,
-        phone_number,
-        email,
-        address,
-        city,
-        state_province,
-        postal_code,
-        country,
-        emergency_contact_name,
-        emergency_contact_phone,
-        national_id,
-        allergies,
-        chronic_diseases,
-        current_medications,
-        registration_date,
-        last_updated,
+        patients.patient_id,
+        patients.smart_patient_id,
+        patients.first_name,
+        patients.last_name,
+        patients.date_of_birth,
+        patients.gender,
+        patients.blood_type,
+        patients.phone_number,
+        patients.email,
+        patients.address,
+        patients.city,
+        patients.state_province,
+        patients.postal_code,
+        patients.country,
+        patients.emergency_contact_name,
+        patients.emergency_contact_phone,
+        patients.national_id,
+        patients.allergies,
+        patients.chronic_diseases,
+        patients.current_medications,
+        patients.registration_date,
+        patients.last_updated,
         COALESCE(latest_visits.last_visit_date, 'Never') as last_visit_date,
         COALESCE(latest_visits.total_visits, 0) as total_visits
       FROM patients 
       ${joinClause}
       ${whereConditions.length > 0 ? 'WHERE ' + whereConditions.join(' AND ') : ''}
-      ORDER BY ${sortField} ${sortDirection}
+      ORDER BY ${['last_visit_date', 'total_visits'].includes(sortField) ? sortField : `patients.${sortField}`} ${sortDirection}
       LIMIT ? OFFSET ?
     `;
 
-    const patients = db.prepare(searchQuery).all(...params, parseInt(limit), offset);
+    const patients = db.prepare(searchQuery).all(...params, parseInt(limit), parseInt(offset || 0));
 
     res.json({
       success: true,

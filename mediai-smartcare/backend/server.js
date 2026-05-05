@@ -97,6 +97,7 @@ app.use("/api/symptoms", symptomRoutes);
 app.use("/api/appointments", appointmentRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/patients", require("./routes/patientSearch"));
 app.use("/api/patients", patientRoutes);
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/notifications", notificationRoutes);
@@ -104,6 +105,7 @@ app.use("/api/prescriptions", prescriptionRoutes);
 app.use("/api/roster", rosterRoutes);
 app.use("/api/lab", labEmergencyRoutes);
 app.use("/api/emergency", labEmergencyRoutes);
+app.use("/api/all-patients", require("./routes/allPatients"));
 
 // ============================================
 // Error Handling Middleware
