@@ -58,7 +58,6 @@ CREATE TABLE IF NOT EXISTS payments (
 -- STAFF & DUTY ROSTER MANAGEMENT MODULE
 -- =====================================================
 
--- Staff members: Hospital employees (staff)
 CREATE TABLE IF NOT EXISTS staff_members (
   staff_id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER,
@@ -78,7 +77,6 @@ CREATE TABLE IF NOT EXISTS staff_members (
   FOREIGN KEY (user_id) REFERENCES users(user_id)
 );
 
--- Shifts: Staff shift assignments
 CREATE TABLE IF NOT EXISTS shifts (
   shift_id INTEGER PRIMARY KEY AUTOINCREMENT,
   staff_id INTEGER NOT NULL,
@@ -94,7 +92,6 @@ CREATE TABLE IF NOT EXISTS shifts (
   FOREIGN KEY (staff_id) REFERENCES staff_members(staff_id)
 );
 
--- Attendance logs: Check-in/Check-out records
 CREATE TABLE IF NOT EXISTS attendance_logs (
   attendance_id INTEGER PRIMARY KEY AUTOINCREMENT,
   staff_id INTEGER NOT NULL,
@@ -111,7 +108,6 @@ CREATE TABLE IF NOT EXISTS attendance_logs (
   FOREIGN KEY (shift_id) REFERENCES shifts(shift_id)
 );
 
--- Staff availability: Current availability status
 CREATE TABLE IF NOT EXISTS staff_availability (
   availability_id INTEGER PRIMARY KEY AUTOINCREMENT,
   staff_id INTEGER NOT NULL UNIQUE,
@@ -123,7 +119,6 @@ CREATE TABLE IF NOT EXISTS staff_availability (
   FOREIGN KEY (updated_by) REFERENCES users(user_id)
 );
 
--- Google Calendar sync logs (for Calendar API integration)
 CREATE TABLE IF NOT EXISTS calendar_sync_logs (
   sync_id INTEGER PRIMARY KEY AUTOINCREMENT,
   staff_id INTEGER,
@@ -140,10 +135,6 @@ CREATE TABLE IF NOT EXISTS calendar_sync_logs (
   FOREIGN KEY (appointment_id) REFERENCES appointments(appointment_id)
 );
 
--- Create indexes for performance
-CREATE INDEX IF NOT EXISTS idx_invoices_patient_status ON invoices(patient_user_id, status);
-CREATE INDEX IF NOT EXISTS idx_invoices_date ON invoices(invoice_date);
-CREATE INDEX IF NOT EXISTS idx_payments_date ON payments(payment_date);
 CREATE INDEX IF NOT EXISTS idx_shifts_staff_date ON shifts(staff_id, shift_date);
 CREATE INDEX IF NOT EXISTS idx_shifts_department_date ON shifts(department, shift_date);
 CREATE INDEX IF NOT EXISTS idx_attendance_staff_date ON attendance_logs(staff_id, attendance_date);

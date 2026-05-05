@@ -30,7 +30,7 @@ router.get(
 router.get(
   "/available-slots",
   requireAuth,
-  requireRole("patient"),
+  requireRole("patient", "doctor", "admin"),
   appointmentController.getAvailableSlots,
 );
 
@@ -45,6 +45,13 @@ router.post(
   requireAuth,
   requireRole("patient"),
   appointmentController.bookAppointment,
+);
+
+router.get(
+  "/my",
+  requireAuth,
+  requireRole("patient"),
+  appointmentController.getMyAppointments,
 );
 
 /**
@@ -79,6 +86,13 @@ router.put(
   requireAuth,
   requireRole("doctor", "admin"),
   appointmentController.updateAppointmentStatus,
+);
+
+router.put(
+  "/:appointmentId/reschedule",
+  requireAuth,
+  requireRole("doctor", "admin"),
+  appointmentController.rescheduleAppointment,
 );
 
 /**

@@ -1,4 +1,4 @@
-const { query } = require("../config/database");
+const { db, engine, query } = require("../config/database");
 const { sendEmail } = require("./emailService");
 
 const DATE_REGEX = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -45,6 +45,7 @@ const MONTH_NAMES = [
 
 let schedulerHandle = null;
 let schedulerRunning = false;
+let notificationSchemaReady = false;
 
 const normalizeBoolean = (value) =>
   value === true ||
@@ -56,6 +57,227 @@ const isDuplicateError = (error) =>
   /Duplicate entry|UNIQUE constraint failed/i.test(
     String(error?.message || ""),
   );
+
+const isMissingColumnError = (error) =>
+  /no such column|Unknown column/i.test(String(error?.message || ""));
+
+const createSqliteNotificationsTableSql = (tableName = "notifications") => `
+  CREATE TABLE IF NOT EXISTS ${tableName} (
+    notification_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    appointment_id INTEGER,
+    related_entity_type TEXT,
+    related_entity_id INTEGER,
+    recipient_role TEXT NOT NULL,
+    channel TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    title TEXT NOT NULL,
+    message TEXT NOT NULL,
+    email_address TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    scheduled_for TEXT,
+    sent_at TEXT,
+    read_at TEXT,
+    metadata TEXT,
+    dedupe_key TEXT NOT NULL UNIQUE,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (appointment_id) REFERENCES appointments(appointment_id) ON DELETE CASCADE
+  );
+`;
+
+const createSqliteNotificationIndexesSql = () => `
+  CREATE INDEX IF NOT EXISTS idx_notifications_user_channel_status
+    ON notifications (user_id, channel, status);
+  CREATE INDEX IF NOT EXISTS idx_notifications_scheduled
+    ON notifications (status, scheduled_for);
+  CREATE INDEX IF NOT EXISTS idx_notifications_appointment
+    ON notifications (appointment_id);
+  CREATE INDEX IF NOT EXISTS idx_notifications_related_entity
+    ON notifications (related_entity_type, related_entity_id);
+`;
+
+const getSqliteNotificationColumns = () =>
+  db.prepare("PRAGMA table_info(notifications)").all();
+
+const ensureSqliteNotificationSchema = () => {
+  db.exec(createSqliteNotificationsTableSql());
+
+  const columns = getSqliteNotificationColumns();
+  const columnNames = new Set(columns.map((column) => column.name));
+  const appointmentColumn = columns.find(
+    (column) => column.name === "appointment_id",
+  );
+
+  if (!columnNames.has("related_entity_type")) {
+    db.exec("ALTER TABLE notifications ADD COLUMN related_entity_type TEXT");
+    columnNames.add("related_entity_type");
+  }
+
+  if (!columnNames.has("related_entity_id")) {
+    db.exec("ALTER TABLE notifications ADD COLUMN related_entity_id INTEGER");
+    columnNames.add("related_entity_id");
+  }
+
+  const appointmentIsRequired = Number(appointmentColumn?.notnull || 0) === 1;
+  if (appointmentIsRequired) {
+    const targetColumns = [
+      "notification_id",
+      "user_id",
+      "appointment_id",
+      "related_entity_type",
+      "related_entity_id",
+      "recipient_role",
+      "channel",
+      "event_type",
+      "title",
+      "message",
+      "email_address",
+      "status",
+      "scheduled_for",
+      "sent_at",
+      "read_at",
+      "metadata",
+      "dedupe_key",
+      "created_at",
+      "updated_at",
+    ];
+
+    const refreshedColumns = new Set(
+      getSqliteNotificationColumns().map((column) => column.name),
+    );
+    const selectColumns = targetColumns.map((column) =>
+      refreshedColumns.has(column) ? column : `NULL AS ${column}`,
+    );
+
+    db.exec("PRAGMA foreign_keys = OFF;");
+    try {
+      db.exec("BEGIN IMMEDIATE;");
+      db.exec("DROP TABLE IF EXISTS notifications_rebuild;");
+      db.exec(createSqliteNotificationsTableSql("notifications_rebuild"));
+      db.exec(`
+        INSERT INTO notifications_rebuild (${targetColumns.join(", ")})
+        SELECT ${selectColumns.join(", ")}
+        FROM notifications;
+      `);
+      db.exec("DROP TABLE notifications;");
+      db.exec("ALTER TABLE notifications_rebuild RENAME TO notifications;");
+      db.exec("COMMIT;");
+    } catch (error) {
+      try {
+        db.exec("ROLLBACK;");
+      } catch (_rollbackError) {
+        // no-op
+      }
+      throw error;
+    } finally {
+      db.exec("PRAGMA foreign_keys = ON;");
+    }
+  }
+
+  db.exec(createSqliteNotificationIndexesSql());
+};
+
+const mysqlColumnExists = async (tableName, columnName) => {
+  const rows = await query(
+    `
+    SELECT COLUMN_NAME
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = ?
+      AND COLUMN_NAME = ?
+    LIMIT 1
+    `,
+    [tableName, columnName],
+  );
+
+  return rows.length > 0;
+};
+
+const safeMysqlSchemaQuery = async (sql) => {
+  try {
+    await query(sql);
+  } catch (error) {
+    if (
+      /Duplicate column name|Duplicate key name|already exists|check that column\/key exists/i.test(
+        String(error?.message || ""),
+      )
+    ) {
+      return;
+    }
+    throw error;
+  }
+};
+
+const ensureMysqlNotificationSchema = async () => {
+  await safeMysqlSchemaQuery(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      notification_id INT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT NULL,
+      appointment_id INT NULL,
+      related_entity_type VARCHAR(60) NULL,
+      related_entity_id INT NULL,
+      recipient_role ENUM('patient', 'doctor', 'admin') NOT NULL,
+      channel ENUM('portal', 'email') NOT NULL,
+      event_type ENUM('confirmation', 'reminder', 'cancellation', 'update', 'prescription', 'appointment_rescheduled') NOT NULL,
+      title VARCHAR(180) NOT NULL,
+      message TEXT NOT NULL,
+      email_address VARCHAR(180) NULL,
+      status ENUM('pending', 'sent', 'failed', 'read', 'skipped') DEFAULT 'pending',
+      scheduled_for DATETIME NULL,
+      sent_at DATETIME NULL,
+      read_at DATETIME NULL,
+      metadata JSON NULL,
+      dedupe_key VARCHAR(255) NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      CONSTRAINT fk_notifications_user FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE CASCADE,
+      CONSTRAINT fk_notifications_appointment FOREIGN KEY (appointment_id) REFERENCES appointments (appointment_id) ON DELETE CASCADE,
+      UNIQUE KEY unique_notification_dedupe_key (dedupe_key),
+      INDEX idx_notifications_user_channel_status (user_id, channel, status),
+      INDEX idx_notifications_scheduled (status, scheduled_for),
+      INDEX idx_notifications_appointment (appointment_id),
+      INDEX idx_notifications_related_entity (related_entity_type, related_entity_id)
+    );
+  `);
+
+  await safeMysqlSchemaQuery("ALTER TABLE notifications MODIFY appointment_id INT NULL");
+  await safeMysqlSchemaQuery(`
+    ALTER TABLE notifications
+    MODIFY event_type ENUM('confirmation', 'reminder', 'cancellation', 'update', 'prescription', 'appointment_rescheduled') NOT NULL
+  `);
+
+  if (!(await mysqlColumnExists("notifications", "related_entity_type"))) {
+    await safeMysqlSchemaQuery(
+      "ALTER TABLE notifications ADD COLUMN related_entity_type VARCHAR(60) NULL AFTER appointment_id",
+    );
+  }
+
+  if (!(await mysqlColumnExists("notifications", "related_entity_id"))) {
+    await safeMysqlSchemaQuery(
+      "ALTER TABLE notifications ADD COLUMN related_entity_id INT NULL AFTER related_entity_type",
+    );
+  }
+
+  await safeMysqlSchemaQuery(
+    "CREATE INDEX idx_notifications_related_entity ON notifications (related_entity_type, related_entity_id)",
+  );
+};
+
+const ensureNotificationSchema = async () => {
+  if (notificationSchemaReady) {
+    return;
+  }
+
+  if (engine === "sqlite") {
+    ensureSqliteNotificationSchema();
+  } else {
+    await ensureMysqlNotificationSchema();
+  }
+
+  notificationSchemaReady = true;
+};
 
 const safeJsonParse = (value, fallback = null) => {
   if (!value) return fallback;
@@ -87,6 +309,12 @@ const formatDisplayDate = (dateString) => {
 };
 
 const formatDisplayTime = (timeString) => String(timeString || "").slice(0, 5);
+
+const formatDoctorName = (name) => {
+  const cleanName = String(name || "").trim();
+  if (!cleanName) return "your doctor";
+  return /^dr\.?\s/i.test(cleanName) ? cleanName : `Dr. ${cleanName}`;
+};
 
 const combineLocalDateTime = (dateString, timeString) => {
   const dateMatch = DATE_REGEX.exec(String(dateString || ""));
@@ -403,7 +631,9 @@ const ensureNotificationPreference = async (userId) => {
 
 const createNotificationRecord = async ({
   userId = null,
-  appointmentId,
+  appointmentId = null,
+  relatedEntityType = null,
+  relatedEntityId = null,
   recipientRole,
   channel,
   eventType,
@@ -417,12 +647,16 @@ const createNotificationRecord = async ({
   metadata = null,
   dedupeKey,
 }) => {
+  await ensureNotificationSchema();
+
   try {
     const result = await query(
       `
       INSERT INTO notifications (
         user_id,
         appointment_id,
+        related_entity_type,
+        related_entity_id,
         recipient_role,
         channel,
         event_type,
@@ -435,11 +669,13 @@ const createNotificationRecord = async ({
         read_at,
         metadata,
         dedupe_key
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       [
         userId,
         appointmentId,
+        relatedEntityType,
+        relatedEntityId,
         recipientRole,
         channel,
         eventType,
@@ -462,6 +698,39 @@ const createNotificationRecord = async ({
     }
     throw error;
   }
+};
+
+const createPortalNotification = async ({
+  userId,
+  appointmentId = null,
+  relatedEntityType = null,
+  relatedEntityId = null,
+  recipientRole = "patient",
+  eventType,
+  title,
+  message,
+  metadata = null,
+  dedupeKey,
+}) => {
+  if (!userId) {
+    return null;
+  }
+
+  return createNotificationRecord({
+    userId,
+    appointmentId,
+    relatedEntityType,
+    relatedEntityId,
+    recipientRole,
+    channel: "portal",
+    eventType,
+    title,
+    message,
+    status: "sent",
+    sentAt: formatDateTimeForDb(new Date()),
+    metadata,
+    dedupeKey,
+  });
 };
 
 const updateNotificationRecord = async (
@@ -704,6 +973,123 @@ const queueReminderNotifications = async (context, recipient, preferences) => {
   }
 };
 
+const normalizeDateForMessage = (value) => {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return formatDateTimeForDb(value).slice(0, 10);
+  }
+
+  return String(value || "").slice(0, 10);
+};
+
+const normalizeTimeForMessage = (value) => String(value || "").slice(0, 8);
+
+const dispatchAppointmentRescheduledNotification = async (
+  appointmentId,
+  { oldDate, oldTime },
+) => {
+  const context = await getAppointmentNotificationContext(appointmentId);
+  if (!context) {
+    return {
+      portalStatus: "skipped",
+      emailStatus: "skipped",
+      reason: "Appointment not found",
+    };
+  }
+
+  const patientUserId = context.patient_user_id || null;
+  const patientEmail = context.patient_user_email || context.patient_email || null;
+  const normalizedOldDate = normalizeDateForMessage(oldDate);
+  const normalizedOldTime = normalizeTimeForMessage(oldTime);
+  const normalizedNewDate = normalizeDateForMessage(context.appointment_date);
+  const normalizedNewTime = normalizeTimeForMessage(context.appointment_time);
+  const oldDisplay = `${formatDisplayDate(normalizedOldDate)} at ${formatDisplayTime(normalizedOldTime)}`;
+  const newDisplay = `${formatDisplayDate(normalizedNewDate)} at ${formatDisplayTime(normalizedNewTime)}`;
+  const doctorName = formatDoctorName(context.doctor_name);
+  const title = "Appointment Rescheduled";
+  const message = `Your appointment with ${doctorName} was rescheduled from ${oldDisplay} to ${newDisplay}.`;
+  const details = [
+    { label: "Doctor", value: doctorName },
+    { label: "Previous Time", value: oldDisplay },
+    { label: "New Time", value: newDisplay },
+    { label: "Location", value: getLocationLabel(context) },
+  ];
+  const metadata = {
+    type: "appointment_rescheduled",
+    appointmentId: context.appointment_id,
+    relatedEntityType: "appointment",
+    relatedEntityId: context.appointment_id,
+    doctorId: context.doctor_id,
+    doctorName: context.doctor_name,
+    patientName: context.patient_name,
+    oldAppointmentDate: normalizedOldDate,
+    oldAppointmentTime: normalizedOldTime,
+    appointmentDate: normalizedNewDate,
+    appointmentTime: normalizedNewTime,
+    status: context.status,
+    details,
+  };
+
+  let portalStatus = "skipped";
+  let emailStatus = "skipped";
+  let emailResult = null;
+  let portalWarning = null;
+
+  try {
+    const notificationId = await createPortalNotification({
+      userId: patientUserId,
+      appointmentId: context.appointment_id,
+      relatedEntityType: "appointment",
+      relatedEntityId: context.appointment_id,
+      recipientRole: "patient",
+      eventType: "appointment_rescheduled",
+      title,
+      message,
+      metadata,
+      dedupeKey: [
+        context.appointment_id,
+        "appointment_rescheduled",
+        "patient",
+        normalizedOldDate,
+        normalizedOldTime,
+        normalizedNewDate,
+        normalizedNewTime,
+        "portal",
+      ].join(":"),
+    });
+    portalStatus = notificationId ? "sent" : "duplicate";
+  } catch (error) {
+    portalStatus = "failed";
+    portalWarning = "Portal notification could not be created.";
+    console.error(
+      `Portal notification failed for rescheduled appointment ${appointmentId}:`,
+      error.message,
+    );
+  }
+
+  if (patientEmail) {
+    emailResult = await sendEmail({
+      to: patientEmail,
+      subject: title,
+      title,
+      message,
+      details,
+    });
+    emailStatus = emailResult.status;
+  } else {
+    emailResult = {
+      status: "skipped",
+      reason: "Patient email is not available",
+    };
+  }
+
+  return {
+    portalStatus,
+    emailStatus,
+    emailResult,
+    portalWarning,
+  };
+};
+
 const dispatchAppointmentNotifications = async (appointmentId, eventType) => {
   const context = await getAppointmentNotificationContext(appointmentId);
   if (!context) {
@@ -782,6 +1168,8 @@ const processDueNotifications = async () => {
   schedulerRunning = true;
 
   try {
+    await ensureNotificationSchema();
+
     const rows = await query(
       `
       SELECT *
@@ -845,7 +1233,10 @@ const startNotificationScheduler = () => {
 
 module.exports = {
   DEFAULT_PREFERENCES,
+  createPortalNotification,
+  dispatchAppointmentRescheduledNotification,
   dispatchAppointmentNotifications,
+  ensureNotificationSchema,
   ensureNotificationPreference,
   processDueNotifications,
   startNotificationScheduler,

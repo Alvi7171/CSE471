@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
+import { API_BASE_URL } from "../services/api";
 
 function MedicalTimeline() {
   const [patientId, setPatientId] = useState("");
@@ -42,7 +43,7 @@ function MedicalTimeline() {
     try {
       console.log("🔍 Searching for patient:", idToUse);
       const response = await axios.get(
-        `http://localhost:1355/api/patients/${idToUse}/complete-history`,
+        `${API_BASE_URL}/patients/${idToUse}/complete-history`,
       );
 
       console.log("📥 Medical history response:", response.data);

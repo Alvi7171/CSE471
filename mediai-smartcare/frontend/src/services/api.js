@@ -1,7 +1,12 @@
 import axios from "axios";
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:1355/api";
+const normalizeApiUrl = (url) => String(url || "").replace(/\/+$/, "");
+
+export const API_BASE_URL = normalizeApiUrl(
+  import.meta.env.VITE_API_BASE_URL ||
+    import.meta.env.VITE_API_URL ||
+    "http://localhost:1355/api",
+);
 
 const TOKEN_KEY = "mediai_token";
 
@@ -42,6 +47,11 @@ export const authAPI = {
 
   me: async () => {
     const response = await api.get("/auth/me");
+    return response.data;
+  },
+
+  updateProfile: async (payload) => {
+    const response = await api.put("/auth/profile", payload);
     return response.data;
   },
 
@@ -108,6 +118,11 @@ export const appointmentAPI = {
     return response.data;
   },
 
+  getMyAppointments: async () => {
+    const response = await api.get("/appointments/my");
+    return response.data;
+  },
+
   getDoctorAppointments: async (doctorId, params = {}) => {
     const response = await api.get(`/appointments/doctor/${doctorId}`, {
       params,
@@ -118,6 +133,43 @@ export const appointmentAPI = {
   updateAppointmentStatus: async (appointmentId, status) => {
     const response = await api.put(`/appointments/${appointmentId}/status`, {
       status,
+    });
+    return response.data;
+  },
+
+  rescheduleAppointment: async (appointmentId, payload) => {
+    const response = await api.put(
+      `/appointments/${appointmentId}/reschedule`,
+      payload,
+    );
+    return response.data;
+  },
+};
+
+export const prescriptionAPI = {
+  createPrescription: async (payload) => {
+    const response = await api.post("/prescriptions", payload);
+    return response.data;
+  },
+
+  getPrescriptionById: async (prescriptionId) => {
+    const response = await api.get(`/prescriptions/${prescriptionId}`);
+    return response.data;
+  },
+
+  getPatientPrescriptions: async (patientId) => {
+    const response = await api.get(`/prescriptions/patient/${patientId}`);
+    return response.data;
+  },
+
+  getDoctorPrescriptionSummary: async (doctorId) => {
+    const response = await api.get(`/prescriptions/doctor/${doctorId}/summary`);
+    return response.data;
+  },
+
+  getPrescriptionPrintHtml: async (prescriptionId) => {
+    const response = await api.get(`/prescriptions/${prescriptionId}/print`, {
+      responseType: "text",
     });
     return response.data;
   },
@@ -204,4 +256,5 @@ export const adminAPI = {
   },
 };
 
+export { api };
 export default api;

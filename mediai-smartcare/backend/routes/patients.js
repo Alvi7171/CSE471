@@ -8,6 +8,17 @@ const router = express.Router();
 const patientController = require("../controllers/patientController");
 const { requireAuth, requireRole } = require("../middleware/authMiddleware");
 
+// Patient routes (backward compatibility + regex support)
+router.get("/", requireAuth, requireRole("doctor", "admin"), patientController.getAllPatients);
+router.get(
+  "/:phone(\\+?[0-9]{7,20})/timeline",
+  requireAuth,
+  requireRole("doctor", "admin"),
+  patientController.getPatientTimelineByPhone,
+);
+router.get("/phone/:phone/timeline", requireAuth, requireRole("doctor", "admin"), patientController.getPatientTimelineByPhone);
+router.get("/:phone/summary", requireAuth, requireRole("doctor", "admin"), patientController.getPatientSummary);
+
 // ============================================
 // PATIENT LISTING & SEARCH
 // ============================================
@@ -25,10 +36,13 @@ router.get("/phone/:phone/timeline", requireAuth, requireRole("doctor", "admin")
  */
 router.post("/register", requireAuth, requireRole("admin"), patientController.registerPatient);
 
+<<<<<<< HEAD
 // ============================================
 // PATIENT RETRIEVAL & UPDATE
 // ============================================
 
+=======
+>>>>>>> origin/main
 /**
  * @route   GET /api/patients/:patientId
  * @desc    Get patient information by Smart Patient ID or Patient ID

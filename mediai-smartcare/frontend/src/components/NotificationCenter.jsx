@@ -33,7 +33,14 @@ const eventStyles = {
   reminder: "bg-amber-100 text-amber-700",
   cancellation: "bg-rose-100 text-rose-700",
   update: "bg-sky-100 text-sky-700",
+  prescription: "bg-teal-100 text-teal-700",
+  appointment_rescheduled: "bg-indigo-100 text-indigo-700",
 };
+
+const formatEventType = (value) =>
+  String(value || "notification")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 
 function NotificationCenter() {
   const containerRef = useRef(null);
@@ -326,7 +333,7 @@ function NotificationCenter() {
                             "bg-slate-100 text-slate-600"
                           }`}
                         >
-                          {notification.event_type}
+                          {formatEventType(notification.event_type)}
                         </span>
                         {notification.status === "sent" && (
                           <span className="text-[11px] font-semibold text-amber-700">
@@ -354,6 +361,15 @@ function NotificationCenter() {
                         {String(notification.metadata.appointmentTime).slice(0, 5)}
                       </p>
                     )}
+                  {(notification.metadata?.prescriptionId ||
+                    (notification.related_entity_type === "prescription" &&
+                      notification.related_entity_id)) && (
+                    <p className="text-xs text-slate-500 mt-2">
+                      Prescription ID:{" "}
+                      {notification.metadata?.prescriptionId ||
+                        notification.related_entity_id}
+                    </p>
+                  )}
                   {notification.status === "sent" && (
                     <button
                       type="button"

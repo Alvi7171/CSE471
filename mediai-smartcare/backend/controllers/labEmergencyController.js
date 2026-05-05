@@ -1,4 +1,4 @@
-const { query, engine } = require("../config/database");
+const { db, query, engine } = require("../config/database");
 
 // ============================================
 // UTILITY FUNCTIONS
@@ -13,8 +13,15 @@ const initializeLabEmergencyTables = async () => {
     const autoInc = isSqlite ? "AUTOINCREMENT" : "AUTO_INCREMENT";
     const pkType = isSqlite ? "INTEGER" : "INT";
 
-    // Laboratory Tests Table
-    await query(`
+    if (!isSqlite) {
+      console.log(
+        "ℹ️ Skipping SQLite lab & emergency table bootstrap for non-SQLite database engine (should be handled by schema.sql)",
+      );
+      return;
+    }
+
+    db.exec(`
+      -- Laboratory Tests Table
       CREATE TABLE IF NOT EXISTS lab_tests (
         test_id ${pkType} PRIMARY KEY ${autoInc},
         patient_id INT NOT NULL,
@@ -892,6 +899,7 @@ exports.getEmergencyStats = async (req, res) => {
     });
   }
 };
+<<<<<<< HEAD
 
 /**
  * Get active emergencies
@@ -951,3 +959,5 @@ exports.markAlertAsRead = async (req, res) => {
     res.status(500).json({ success: false, message: "Error updating alert" });
   }
 };
+=======
+>>>>>>> origin/main

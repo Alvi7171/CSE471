@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from "react";
-import axios from "axios";
+import api from "../services/api";
 
 function PatientRegistration() {
   const [formData, setFormData] = useState({
@@ -77,8 +76,8 @@ function PatientRegistration() {
     try {
       console.log("📤 Sending registration request:", formData);
       // First create user account
-      const authResponse = await axios.post(
-        "http://localhost:1355/api/auth/register",
+      const authResponse = await api.post(
+        "/auth/register",
         {
           fullName: `${formData.firstName} ${formData.lastName}`,
           email: formData.email || null,
@@ -92,8 +91,8 @@ function PatientRegistration() {
       );
 
       // Then create patient record
-      const patientResponse = await axios.post(
-        "http://localhost:1355/api/patients/register",
+      const patientResponse = await api.post(
+        "/patients/register",
         formData,
       );
 

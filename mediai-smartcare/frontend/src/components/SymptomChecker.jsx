@@ -1,60 +1,76 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { symptomAPI } from "../services/api";
 
-const SymptomChecker = () => {
-  const [formData, setFormData] = useState({
-    patientName: "",
-    age: "",
-    gender: "",
-    symptoms: "",
-  });
+const buildProfileDefaults = (currentUser) => ({
+  patientName: currentUser?.fullName || "",
+  age:
+    currentUser?.age === undefined || currentUser?.age === null
+      ? ""
+      : String(currentUser.age),
+  gender: currentUser?.gender || "",
+  symptoms: "",
+});
 
+const SymptomChecker = ({ currentUser }) => {
+  const profileDefaults = useMemo(
+    () => buildProfileDefaults(currentUser),
+    [currentUser?.age, currentUser?.fullName, currentUser?.gender],
+  );
+
+  const [formData, setFormData] = useState(profileDefaults);
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState("");
   const [history, setHistory] = useState([]);
   const [showHistory, setShowHistory] = useState(false);
   const [language, setLanguage] = useState("en");
 
-  const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
+  useEffect(() => {
+    setFormData((prev) => ({
+      ...prev,
+      patientName: profileDefaults.patientName,
+      age: profileDefaults.age,
+      gender: profileDefaults.gender,
+    }));
+  }, [profileDefaults]);
+
+  const handleChange = (event) => {
+    const { name, value } = event.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async (event) => {
+    event.preventDefault();
     setLoading(true);
-    setError(null);
+    setError("");
     setResult(null);
 
     try {
       const response = await symptomAPI.checkSymptoms({
-        patientName: formData.patientName || "Anonymous",
-        age: formData.age ? parseInt(formData.age) : null,
-        gender: formData.gender || null,
+        patientName: formData.patientName || currentUser?.fullName || "Anonymous",
+        age: formData.age ? parseInt(formData.age, 10) : currentUser?.age || null,
+        gender: formData.gender || currentUser?.gender || null,
         symptoms: formData.symptoms,
         language: language,
       });
-
       setResult(response);
-      setLoading(false);
     } catch (err) {
       setError(
         err.response?.data?.message ||
           "Failed to analyze symptoms. Please try again.",
       );
+    } finally {
       setLoading(false);
     }
   };
 
   const loadHistory = async () => {
     try {
-      const response = await symptomAPI.getHistory();
-      setHistory(response.data);
+      const historyOwner = currentUser?.fullName || formData.patientName || null;
+      const response = await symptomAPI.getHistory(historyOwner);
+      setHistory(response.data || []);
       setShowHistory(true);
-    } catch (err) {
+    } catch (_err) {
       setError("Failed to load history");
     }
   };
@@ -75,14 +91,9 @@ const SymptomChecker = () => {
   };
 
   const resetForm = () => {
-    setFormData({
-      patientName: "",
-      age: "",
-      gender: "",
-      symptoms: "",
-    });
+    setFormData({ ...profileDefaults, symptoms: "" });
     setResult(null);
-    setError(null);
+    setError("");
   };
 
   return (
@@ -91,10 +102,15 @@ const SymptomChecker = () => {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-3xl font-bold text-primary mb-2">
+            <h1 className="text-3xl font-bold text-primary mb-2">
               🤖 {language === 'bn' ? 'এআই লক্ষণ পরীক্ষক এবং ট্রায়াজ সিস্টেম' : 'AI Symptom Checker & Triage System'}
             </h1>
             <p className="text-gray-600">
               {language === 'bn' ? 'তাত্ক্ষণিক এআই-চালিত স্বাস্থ্য মূল্যায়ন এবং বিশেষজ্ঞের পরামর্শ পান' : 'Get instant AI-powered health assessment and specialist recommendations'}
+            </p>
+            <p className="text-xs text-gray-500 mt-2">
+              Your profile details are pre-filled to keep symptom records consistent.
+            </p>
             </p>
           </div>
           <div className="flex gap-2">
@@ -110,12 +126,11 @@ const SymptomChecker = () => {
           </div>
         </div>
 
-        {/* Symptom Check Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Patient Name (Optional)
+                Patient Name
               </label>
               <input
                 type="text"
@@ -129,7 +144,7 @@ const SymptomChecker = () => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Age (Optional)
+                Age
               </label>
               <input
                 type="number"
@@ -145,7 +160,7 @@ const SymptomChecker = () => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Gender (Optional)
+                Gender
               </label>
               <select
                 name="gender"
@@ -169,14 +184,11 @@ const SymptomChecker = () => {
               name="symptoms"
               value={formData.symptoms}
               onChange={handleChange}
-              placeholder="Describe your symptoms in detail (e.g., fever, headache, cough for 3 days)"
+              placeholder="Describe your symptoms in detail"
               required
               rows="4"
               className="input-field resize-none"
             />
-            <p className="text-xs text-gray-500 mt-1">
-              Be as detailed as possible for accurate analysis
-            </p>
           </div>
 
           <div className="flex gap-3">
@@ -195,46 +207,41 @@ const SymptomChecker = () => {
               )}
             </button>
             {result && (
-              <button
-                type="button"
-                onClick={resetForm}
-                className="btn-secondary"
-              >
+              <button type="button" onClick={resetForm} className="btn-secondary">
                 New Check
               </button>
             )}
           </div>
         </form>
 
-        {/* Error Display */}
         {error && (
           <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
             <p className="text-red-800">{error}</p>
           </div>
         )}
 
-        {/* Results Display */}
-        {result && result.success && (
+        {result?.success && (
           <div className="mt-6 space-y-4">
             <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg p-6 border border-blue-200">
               <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
                 📊 {language === 'bn' ? 'বিশ্লেষণের ফলাফল' : 'Analysis Results'}
                 <span
-                  className={`ml-auto ${getUrgencyBadgeClass(result.analysis.urgencyLevel)}`}
+                  className={`ml-auto ${getUrgencyBadgeClass(
+                    result.analysis.urgencyLevel,
+                  )}`}
                 >
                   {result.analysis.urgencyLevel} {language === 'bn' ? 'অগ্রাধিকার' : 'Priority'}
                 </span>
               </h2>
 
-              {/* Possible Diseases */}
               <div className="mb-4">
                 <h3 className="font-semibold text-gray-700 mb-2">
                   🩺 {language === 'bn' ? 'সম্ভাব্য রোগসমূহ:' : 'Possible Conditions:'}
                 </h3>
                 <div className="flex flex-wrap gap-2">
-                  {result.analysis.possibleDiseases.map((disease, index) => (
+                  {result.analysis.possibleDiseases.map((disease) => (
                     <span
-                      key={index}
+                      key={disease}
                       className="bg-white px-3 py-1 rounded-full text-sm border border-gray-200"
                     >
                       {disease}
@@ -243,7 +250,6 @@ const SymptomChecker = () => {
                 </div>
               </div>
 
-              {/* Recommended Specialist */}
               <div className="mb-4">
                 <h3 className="font-semibold text-gray-700 mb-2">
                   👨‍⚕️ {language === 'bn' ? 'প্রস্তাবিত বিশেষজ্ঞ:' : 'Recommended Specialist:'}
@@ -253,7 +259,6 @@ const SymptomChecker = () => {
                 </p>
               </div>
 
-              {/* AI Advice */}
               <div className="mb-4">
                 <h3 className="font-semibold text-gray-700 mb-2">
                   💡 {language === 'bn' ? 'চিকিৎসা পরামর্শ:' : 'Medical Advice:'}
@@ -263,7 +268,6 @@ const SymptomChecker = () => {
                 </p>
               </div>
 
-              {/* Warning */}
               {result.analysis.warning && (
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                   <p className="text-yellow-800">
@@ -281,7 +285,6 @@ const SymptomChecker = () => {
         )}
       </div>
 
-      {/* History Modal */}
       {showHistory && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg max-w-4xl w-full max-h-[80vh] overflow-hidden flex flex-col">
@@ -292,7 +295,7 @@ const SymptomChecker = () => {
                   onClick={() => setShowHistory(false)}
                   className="text-gray-500 hover:text-gray-700 text-2xl"
                 >
-                  ×
+                  x
                 </button>
               </div>
             </div>

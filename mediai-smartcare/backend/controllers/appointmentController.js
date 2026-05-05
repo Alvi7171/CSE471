@@ -1,5 +1,6 @@
 const { db, query } = require("../config/database");
 const {
+  dispatchAppointmentRescheduledNotification,
   dispatchAppointmentNotifications,
 } = require("../utils/notificationService");
 
@@ -65,6 +66,49 @@ const resolveScheduleWindowMinutes = (startTime, endTime) => {
 
 const formatSlotDisplayTime = (timeString) => timeString.slice(0, 5);
 
+const normalizeDateValue = (value) => {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, "0");
+    const day = String(value.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  return String(value || "").slice(0, 10);
+};
+
+const normalizeTimeValue = (value) => {
+  const match = TIME_REGEX.exec(String(value || ""));
+  if (!match) return null;
+  return `${match[1]}:${match[2]}:00`;
+};
+
+const toPositiveInteger = (value) => {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+};
+
+const isSlotInsideSchedule = (timeString, schedule) => {
+  const appointmentMinutes = timeToMinutes(timeString);
+  const scheduleWindow = resolveScheduleWindowMinutes(
+    schedule.start_time,
+    schedule.end_time,
+  );
+  const slotDuration = Number(schedule.slot_duration || 30);
+
+  if (
+    appointmentMinutes === null ||
+    !scheduleWindow ||
+    slotDuration <= 0 ||
+    appointmentMinutes < scheduleWindow.startMinutes ||
+    appointmentMinutes >= scheduleWindow.endMinutes
+  ) {
+    return false;
+  }
+
+  return (appointmentMinutes - scheduleWindow.startMinutes) % slotDuration === 0;
+};
+
 const notifyAppointmentEvent = async (appointmentId, eventType) => {
   try {
     await dispatchAppointmentNotifications(appointmentId, eventType);
@@ -108,6 +152,7 @@ exports.getAvailableDoctors = async (req, res) => {
         d.experience_years,
         d.consultation_fee,
         d.phone,
+        
         d.email
       FROM doctors d
       INNER JOIN doctor_schedules s ON d.doctor_id = s.doctor_id
@@ -143,6 +188,16 @@ exports.getAvailableSlots = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "doctorId and date are required",
+      });
+    }
+
+    if (
+      req.user?.role === "doctor" &&
+      Number(doctorId) !== Number(req.user.doctorId)
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "You can view only your own appointment slots",
       });
     }
 
@@ -531,9 +586,13 @@ exports.getDoctorAppointments = async (req, res) => {
     let sql = `
       SELECT
         a.*,
-        d.name AS doctor_name
+        d.name AS doctor_name,
+        patient_user.user_id AS patient_record_user_id,
+        patient_user.full_name AS patient_user_full_name,
+        patient_user.phone AS patient_user_phone
       FROM appointments a
       JOIN doctors d ON d.doctor_id = a.doctor_id
+      LEFT JOIN users patient_user ON patient_user.user_id = a.patient_user_id
       WHERE a.doctor_id = ?
     `;
 
@@ -562,6 +621,44 @@ exports.getDoctorAppointments = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Failed to fetch appointments",
+      error: error.message,
+    });
+  }
+};
+
+exports.getMyAppointments = async (req, res) => {
+  try {
+    if (!req.user?.userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+    }
+
+    const appointments = await query(
+      `
+      SELECT
+        a.*,
+        d.name AS doctor_name,
+        d.specialization,
+        d.department,
+        d.consultation_fee
+      FROM appointments a
+      JOIN doctors d ON d.doctor_id = a.doctor_id
+      WHERE a.patient_user_id = ?
+      ORDER BY a.appointment_date DESC, a.appointment_time DESC
+      `,
+      [req.user.userId],
+    );
+
+    return res.json({
+      success: true,
+      appointments,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Failed to load patient appointments",
       error: error.message,
     });
   }
@@ -636,6 +733,228 @@ exports.cancelAppointment = async (req, res) => {
       message: "Failed to cancel appointment",
       error: error.message,
     });
+  }
+};
+
+exports.rescheduleAppointment = async (req, res) => {
+  const connection = await db.getConnection();
+
+  try {
+    const appointmentId = toPositiveInteger(req.params.appointmentId);
+    const newDate = normalizeDateValue(req.body.new_date || req.body.newDate);
+    const newTime = normalizeTimeValue(req.body.new_time || req.body.newTime);
+
+    if (!appointmentId) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid appointment id",
+      });
+    }
+
+    if (!newDate || !newTime) {
+      return res.status(400).json({
+        success: false,
+        message: "new_date and new_time are required",
+      });
+    }
+
+    const dayOfWeek = getDayOfWeekFromDateString(newDate);
+    if (!dayOfWeek) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid new_date format. Use YYYY-MM-DD",
+      });
+    }
+
+    await connection.beginTransaction();
+
+    const [appointmentRows] = await connection.execute(
+      `
+      SELECT
+        a.appointment_id,
+        a.schedule_id,
+        a.doctor_id,
+        a.patient_user_id,
+        a.appointment_date,
+        a.appointment_time,
+        a.status,
+        d.name AS doctor_name
+      FROM appointments a
+      JOIN doctors d ON d.doctor_id = a.doctor_id
+      WHERE a.appointment_id = ?
+      LIMIT 1
+      FOR UPDATE
+      `,
+      [appointmentId],
+    );
+
+    if (appointmentRows.length === 0) {
+      await connection.rollback();
+      return res.status(404).json({
+        success: false,
+        message: "Appointment not found",
+      });
+    }
+
+    const appointment = appointmentRows[0];
+    const status = String(appointment.status || "").toLowerCase();
+
+    if (req.user?.role === "patient") {
+      await connection.rollback();
+      return res.status(403).json({
+        success: false,
+        message: "Patients cannot reschedule appointments",
+      });
+    }
+
+    if (req.user?.role === "doctor") {
+      if (!req.user.doctorId) {
+        await connection.rollback();
+        return res.status(403).json({
+          success: false,
+          message: "Doctor account is not linked to a doctor profile",
+        });
+      }
+
+      if (Number(appointment.doctor_id) !== Number(req.user.doctorId)) {
+        await connection.rollback();
+        return res.status(403).json({
+          success: false,
+          message: "You can reschedule only your own appointments",
+        });
+      }
+    }
+
+    if (["cancelled", "completed"].includes(status)) {
+      await connection.rollback();
+      return res.status(400).json({
+        success: false,
+        message: "Appointment already cancelled or completed",
+      });
+    }
+
+    const [scheduleRows] = await connection.execute(
+      `
+      SELECT schedule_id, doctor_id, start_time, end_time, slot_duration
+      FROM doctor_schedules
+      WHERE doctor_id = ?
+        AND is_active = 1
+        AND (schedule_date = ? OR (day_of_week = ? AND schedule_date IS NULL))
+      ORDER BY schedule_date DESC, start_time ASC
+      FOR UPDATE
+      `,
+      [appointment.doctor_id, newDate, dayOfWeek],
+    );
+
+    const matchingSchedule = scheduleRows.find((schedule) =>
+      isSlotInsideSchedule(newTime, schedule),
+    );
+
+    if (!matchingSchedule) {
+      await connection.rollback();
+      return res.status(400).json({
+        success: false,
+        message: "Invalid schedule for selected date/time",
+      });
+    }
+
+    const [conflictRows] = await connection.execute(
+      `
+      SELECT appointment_id
+      FROM appointments
+      WHERE doctor_id = ?
+        AND appointment_date = ?
+        AND appointment_time = ?
+        AND appointment_id <> ?
+        AND status IN ('pending', 'confirmed', 'completed')
+      LIMIT 1
+      FOR UPDATE
+      `,
+      [appointment.doctor_id, newDate, newTime, appointmentId],
+    );
+
+    if (conflictRows.length > 0) {
+      await connection.rollback();
+      return res.status(409).json({
+        success: false,
+        message: "Slot already booked",
+      });
+    }
+
+    const oldDate = normalizeDateValue(appointment.appointment_date);
+    const oldTime = normalizeTimeValue(appointment.appointment_time);
+
+    await connection.execute(
+      `
+      UPDATE appointments
+      SET schedule_id = ?,
+          appointment_date = ?,
+          appointment_time = ?,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE appointment_id = ?
+      `,
+      [matchingSchedule.schedule_id, newDate, newTime, appointmentId],
+    );
+
+    await connection.commit();
+
+    const notificationResult =
+      await dispatchAppointmentRescheduledNotification(appointmentId, {
+        oldDate,
+        oldTime,
+      });
+
+    const updatedRows = await query(
+      `
+      SELECT
+        a.*,
+        d.name AS doctor_name,
+        patient_user.user_id AS patient_record_user_id,
+        patient_user.full_name AS patient_user_full_name,
+        patient_user.phone AS patient_user_phone
+      FROM appointments a
+      JOIN doctors d ON d.doctor_id = a.doctor_id
+      LEFT JOIN users patient_user ON patient_user.user_id = a.patient_user_id
+      WHERE a.appointment_id = ?
+      LIMIT 1
+      `,
+      [appointmentId],
+    );
+
+    return res.json({
+      success: true,
+      message: "Appointment rescheduled successfully",
+      appointment: updatedRows[0] || null,
+      notificationResult,
+      notificationWarning: notificationResult.portalWarning || null,
+    });
+  } catch (error) {
+    try {
+      await connection.rollback();
+    } catch (_rollbackError) {
+      // no-op
+    }
+
+    const duplicateSlotError =
+      error?.code === "ER_DUP_ENTRY" ||
+      error?.code === "SQLITE_CONSTRAINT_UNIQUE" ||
+      String(error?.message || "").includes("UNIQUE constraint failed") ||
+      String(error?.message || "").includes("Duplicate entry");
+
+    if (duplicateSlotError) {
+      return res.status(409).json({
+        success: false,
+        message: "Slot already booked",
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to reschedule appointment",
+      error: error.message,
+    });
+  } finally {
+    connection.release();
   }
 };
 
