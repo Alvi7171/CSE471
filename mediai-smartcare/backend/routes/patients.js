@@ -165,4 +165,11 @@ router.get("/:phone/summary", requireAuth, requireRole("doctor", "admin"), patie
  */
 router.post("/:patientId/audit-log", requireAuth, requireRole("doctor", "admin"), patientController.logMedicalAccess);
 
+/**
+ * @route   DELETE /api/patients/:patientId
+ * @desc    Delete patient record and all related medical data
+ * @access  Patient (own records), Admin
+ */
+router.delete("/:patientId", requireAuth, patientController.deletePatientRecord);
+
 module.exports = router;

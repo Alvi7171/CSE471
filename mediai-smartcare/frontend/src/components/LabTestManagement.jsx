@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import api from "../services/api";
 
-function LabTestManagement() {
+function LabTestManagement({ currentUser }) {
   const [activeTab, setActiveTab] = useState("requests");
   const [tests, setTests] = useState([]);
   const [selectedTest, setSelectedTest] = useState(null);
@@ -578,22 +578,24 @@ function LabTestManagement() {
                       </button>
                     ) : null}
 
-                    {/* Admin Status Overrides */}
-                    <div className="mt-12 pt-8 border-t border-slate-100">
-                      <h5 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-6 text-center">Protocol Management</h5>
-                      <div className="flex flex-wrap justify-center gap-3">
-                        {["Pending", "Sample Collected", "In Progress", "Completed", "Cancelled"].map((s) => (
-                          <button
-                            key={s}
-                            disabled={selectedTest.test.status === s}
-                            onClick={() => handleUpdateStatus(selectedTest.test.test_id, s)}
-                            className={`px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-wider transition-all ${selectedTest.test.status === s ? "bg-slate-800 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}
-                          >
-                            {s}
-                          </button>
-                        ))}
+                    {/* Doctor Status Overrides */}
+                    {currentUser?.role === 'doctor' && (
+                      <div className="mt-12 pt-8 border-t border-slate-100">
+                        <h5 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-6 text-center">Protocol Management</h5>
+                        <div className="flex flex-wrap justify-center gap-3">
+                          {["Pending", "Sample Collected", "In Progress", "Completed", "Cancelled"].map((s) => (
+                            <button
+                              key={s}
+                              disabled={selectedTest.test.status === s}
+                              onClick={() => handleUpdateStatus(selectedTest.test.test_id, s)}
+                              className={`px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-wider transition-all ${selectedTest.test.status === s ? "bg-slate-800 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}
+                            >
+                              {s}
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
                 </div>
               ) : (

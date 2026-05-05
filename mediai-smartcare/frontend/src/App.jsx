@@ -6,14 +6,11 @@ import PatientBooking from "./components/PatientBooking";
 import PatientRegistration from "./components/PatientRegistration";
 import PatientTimeline from "./components/PatientTimeline";
 import PatientSearchManagement from "./components/PatientSearchManagement";
-import EnhancedMedicalTimeline from "./components/EnhancedMedicalTimeline";
 import SymptomChecker from "./components/SymptomChecker";
 import LabTestManagement from "./components/LabTestManagement";
 import EmergencyResponse from "./components/EmergencyResponse";
 import DoctorsList from "./components/DoctorsList";
-import PatientEmergencySOS from "./components/PatientEmergencySOS";
 import PatientLabReports from "./components/PatientLabReports";
-import GlobalEmergencyAlert from "./components/GlobalEmergencyAlert";
 import "./index.css";
 import { authAPI } from "./services/api";
 
@@ -41,13 +38,11 @@ const roleTabs = {
     { key: "booking", label: "Book Appointment" },
     { key: "doctors", label: "Doctors List" },
     { key: "labreports", label: "🧪 Lab Reports" },
-    { key: "sos", label: "🚨 Emergency SOS" },
   ],
   doctor: [
     { key: "schedule", label: "Doctor Schedule" },
     { key: "labtests", label: "Lab Tests" },
     { key: "emergency", label: "Emergency Response" },
-    { key: "search", label: "Patient Search" },
     { key: "timeline", label: "Medical Timeline" },
   ],
   admin: [
@@ -58,7 +53,6 @@ const roleTabs = {
     { key: "roster", label: "Staff Roster" },
     { key: "labtests", label: "Lab Test Management" },
     { key: "emergency", label: "Emergency Response" },
-    { key: "search", label: "Patient Search" },
     { key: "timeline", label: "Medical Timeline" },
     { key: "admin", label: "Admin Console" },
     { key: "doctors", label: "Doctors List" },
@@ -548,11 +542,8 @@ function App() {
             {activeTab === "booking" && user.role === "patient" && (
               <PatientBooking />
             )}
-            {activeTab === "search" && (user.role === "doctor" || user.role === "admin") && (
-              <PatientSearchManagement />
-            )}
             {activeTab === "timeline" && (user.role === "doctor" || user.role === "admin") && (
-              <EnhancedMedicalTimeline />
+              <PatientSearchManagement />
             )}
             {activeTab === "schedule" &&
               (user.role === "doctor" || user.role === "admin") && (
@@ -562,7 +553,7 @@ function App() {
               <PatientRegistration />
             )}
             {(activeTab === "labtests") && (
-              <LabTestManagement />
+              <LabTestManagement currentUser={user} />
             )}
             {(activeTab === "emergency") && (
               <EmergencyResponse 
@@ -573,9 +564,6 @@ function App() {
             )}
             {activeTab === "doctors" && (
               <DoctorsList currentUser={user} />
-            )}
-            {activeTab === "sos" && user.role === "patient" && (
-              <PatientEmergencySOS currentUser={user} />
             )}
             {activeTab === "labreports" && user.role === "patient" && (
               <PatientLabReports currentUser={user} />
@@ -604,13 +592,6 @@ function App() {
           )}
         </section>
       </div>
-      <GlobalEmergencyAlert 
-        currentUser={user} 
-        onNavigate={(tab, emergencyId) => {
-          setActiveTab(tab);
-          if (emergencyId) setTargetEmergencyId(emergencyId);
-        }} 
-      />
     </div>
   );
 }

@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Patient Record Deletion Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+        .test-section { margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 8px; background: white; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        .warning { background-color: #fff3cd; border-color: #ffeaa7; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+        button { background: #dc3545; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin: 5px; }
+        button:hover { background: #c82333; }
+        button:disabled { background: #6c757d; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+    <h1>🗑️ Patient Record Deletion System Test</h1>
+    
+    <div class="test-section info">
+        <h2>System Overview</h2>
+        <p>This test demonstrates the patient record deletion functionality:</p>
+        <ul>
+            <li>✅ Patients can delete their own medical records</li>
+            <li>✅ Complete data removal (visits, prescriptions, lab tests, reports, emergencies)</li>
+            <li>✅ Secure authentication and authorization</li>
+            <li>✅ Transaction-based deletion for data integrity</li>
+        </ul>
+    </div>
+
+    <div class="test-section warning">
+        <h2>⚠️ Security Features</h2>
+        <p><strong>Authentication Required:</strong> Only authenticated patients can delete their own records</p>
+        <p><strong>Authorization Check:</strong> Patients can only delete their own data, admins can delete any</p>
+        <p><strong>Complete Deletion:</strong> All related medical records are deleted in a transaction</p>
+        <p><strong>Irreversible Action:</strong> Once deleted, data cannot be recovered</p>
+    </div>
+
+    <div class="test-section">
+        <h2>API Endpoint Test</h2>
+        <p>Testing the DELETE endpoint security:</p>
+        
+        <div>
+            <label>Patient Phone (for testing):</label>
+            <input type="text" id="patientPhone" value="01712345678" style="margin: 5px; padding: 5px;">
+            <button onclick="testDeleteEndpoint()">🔒 Test DELETE Endpoint (No Auth)</button>
+        </div>
+        
+        <div id="testResult" style="margin-top: 10px;"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Deletion Process Flow</h2>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+            <div>
+                <h3>🔧 Backend Process:</h3>
+                <ol>
+                    <li>Authenticate user (patient/admin)</li>
+                    <li>Verify patient ownership (for patients)</li>
+                    <li>Start database transaction</li>
+                    <li>Delete treatment timeline records</li>
+                    <li>Delete prescriptions</li>
+                    <li>Delete lab reports and tests</li>
+                    <li>Delete diagnostic reports</li>
+                    <li>Delete medical visits</li>
+                    <li>Delete emergency cases</li>
+                    <li>Delete patient record</li>
+                    <li>Commit transaction</li>
+                </ol>
+            </div>
+            <div>
+                <h3>🎨 Frontend Process:</h3>
+                <ol>
+                    <li>Show patient profile</li>
+                    <li>Display account management section</li>
+                    <li>Show deletion warning</li>
+                    <li>Require confirmation dialog</li>
+                    <li>Call DELETE API endpoint</li>
+                    <li>Handle success/error responses</li>
+                    <li>Redirect to login after deletion</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>Database Tables Affected</h2>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px;">
+            <div style="background: #ffebee; padding: 10px; border-radius: 5px;">
+                <strong>treatment_timeline</strong>
+                <p style="margin: 5px 0; font-size: 12px;">Treatment procedures and outcomes</p>
+            </div>
+            <div style="background: #e8f5e8; padding: 10px; border-radius: 5px;">
+                <strong>prescriptions</strong>
+                <p style="margin: 5px 0; font-size: 12px;">Medication prescriptions</p>
+            </div>
+            <div style="background: #e3f2fd; padding: 10px; border-radius: 5px;">
+                <strong>lab_reports</strong>
+                <p style="margin: 5px 0; font-size: 12px;">Lab test reports</p>
+            </div>
+            <div style="background: #fce4ec; padding: 10px; border-radius: 5px;">
+                <strong>lab_tests</strong>
+                <p style="margin: 5px 0; font-size: 12px;">Lab test requests</p>
+            </div>
+            <div style="background: #f3e5f5; padding: 10px; border-radius: 5px;">
+                <strong>diagnostic_reports</strong>
+                <p style="margin: 5px 0; font-size: 12px;">Medical test results</p>
+            </div>
+            <div style="background: #e0f2f1; padding: 10px; border-radius: 5px;">
+                <strong>medical_visits</strong>
+                <p style="margin: 5px 0; font-size: 12px;">Doctor visit records</p>
+            </div>
+            <div style="background: #fff3e0; padding: 10px; border-radius: 5px;">
+                <strong>emergency_cases</strong>
+                <p style="margin: 5px 0; font-size: 12px;">Emergency records</p>
+            </div>
+            <div style="background: #ffebee; padding: 10px; border-radius: 5px;">
+                <strong>patients</strong>
+                <p style="margin: 5px 0; font-size: 12px;">Main patient record</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function testDeleteEndpoint() {
+            const phone = document.getElementById('patientPhone').value;
+            const resultDiv = document.getElementById('testResult');
+            
+            if (!phone) {
+                resultDiv.innerHTML = '<div class="error">Please enter a patient phone number</div>';
+                return;
+            }
+
+            resultDiv.innerHTML = '<div class="info">Testing DELETE endpoint...</div>';
+            
+            try {
+                // This should fail without authentication
+                const response = await axios.delete(`http://localhost:1355/api/patients/${phone}`);
+                
+                resultDiv.innerHTML = `
+                    <div class="error">
+                        <h3>❌ Unexpected Success</h3>
+                        <p>The endpoint should require authentication but it didn't!</p>
+                        <pre>${JSON.stringify(response.data, null, 2)}</pre>
+                    </div>
+                `;
+            } catch (error) {
+                if (error.response?.status === 401 && error.response?.data?.message?.includes("Missing authentication token")) {
+                    resultDiv.innerHTML = `
+                        <div class="success">
+                            <h3>✅ Security Working Correctly</h3>
+                            <p>The DELETE endpoint is properly protected with authentication.</p>
+                            <p><strong>Status:</strong> ${error.response.status}</p>
+                            <p><strong>Message:</strong> ${error.response.data.message}</p>
+                            <p><strong>✅ This is the expected behavior!</strong></p>
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="error">
+                            <h3>❌ Unexpected Error</h3>
+                            <p><strong>Status:</strong> ${error.response?.status}</p>
+                            <p><strong>Error:</strong> ${error.response?.data?.message || error.message}</p>
+                            <pre>${JSON.stringify(error.response?.data, null, 2)}</pre>
+                        </div>
+                    `;
+                }
+            }
+        }
+
+        // Auto-test on page load
+        window.onload = function() {
+            setTimeout(testDeleteEndpoint, 1000);
+        };
+    </script>
+</body>
+</html>

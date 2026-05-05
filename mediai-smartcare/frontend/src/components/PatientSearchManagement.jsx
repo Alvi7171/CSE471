@@ -50,7 +50,19 @@ function PatientSearchManagement() {
   useEffect(() => {
     loadStatistics();
     loadRecentlyActive();
+    handleSearch(); // Load all patients on mount
   }, []);
+
+  // Debounced search when filters change
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      // Only search automatically if there's a query or if we're resetting
+      // (handleSearch handles empty query by showing all)
+      handleSearch(1);
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [searchFilters.query, searchFilters.gender, searchFilters.bloodType]);
 
   // Load statistics
   const loadStatistics = async () => {
@@ -87,15 +99,15 @@ function PatientSearchManagement() {
     }
 
     try {
-      const response = await api.get("/patients/search", { 
-        params: { 
+      const response = await api.get("/patients/search", {
+        params: {
           query: query,
           limit: 5,
           sortBy: "last_updated",
           sortOrder: "DESC"
-        } 
+        }
       });
-      
+
       setSearchSuggestions(response.data.data || []);
       setShowSuggestions(true);
     } catch (err) {
@@ -111,20 +123,20 @@ function PatientSearchManagement() {
       setLoading(true);
       setError("");
       setShowSuggestions(false);
-      
+
       const params = new URLSearchParams();
-      
+
       // Add all filters to params
       Object.entries(searchFilters).forEach(([key, value]) => {
         if (value && value !== "") {
           params.append(key, value);
         }
       });
-      
+
       params.append('page', page);
 
       const response = await api.get("/patients/search", { params: Object.fromEntries(params) });
-      
+
       setSearchResults(response.data.data);
       setTotalPages(response.data.pagination.totalPages);
       setTotalResults(response.data.pagination.totalResults);
@@ -211,7 +223,7 @@ function PatientSearchManagement() {
       setLoading(true);
       // Use the correct endpoint to get complete medical history
       const response = await api.get(`/patients/${patient.patient_id}/complete-history`);
-      
+
       if (response.data.success) {
         // Store patient data with medical history
         setSelectedPatient({
@@ -234,11 +246,8 @@ function PatientSearchManagement() {
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-4xl font-bold text-gray-800 flex items-center gap-3">
-          👥 Patient Search & Management
+          📋 Medical Timeline & Patient Records
         </h1>
-        <p className="text-gray-600 mt-2 text-lg">
-          Module 1: Comprehensive patient search, filtering, analytics, and timeline management
-        </p>
       </div>
 
       {/* Statistics Dashboard */}
@@ -259,7 +268,7 @@ function PatientSearchManagement() {
                 <div className="text-4xl opacity-20">👥</div>
               </div>
             </div>
-            
+
             <div className="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-2xl p-6 shadow-lg">
               <div className="flex items-center justify-between">
                 <div>
@@ -297,27 +306,6 @@ function PatientSearchManagement() {
       <div className="bg-white rounded-2xl shadow-xl p-6 mb-8 border border-gray-200">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold text-gray-800">🔍 Advanced Patient Search</h2>
-          <div className="flex gap-3">
-            <button
-              onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-            >
-              {showAdvancedFilters ? '🔼 Simple' : '🔽 Advanced'}
-            </button>
-            <button
-              onClick={resetFilters}
-              className="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors"
-            >
-              🔄 Reset
-            </button>
-            <button
-              onClick={() => handleSearch(currentPage)}
-              disabled={loading}
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-            >
-              {loading ? '🔄 Searching...' : '🔍 Search'}
-            </button>
-          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -336,7 +324,7 @@ function PatientSearchManagement() {
               onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
-            
+
             {/* Search Suggestions Dropdown */}
             {showSuggestions && searchSuggestions.length > 0 && (
               <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
@@ -499,21 +487,7 @@ function PatientSearchManagement() {
           )}
         </div>
 
-        {/* Export Options */}
-        <div className="flex gap-3 mt-6 pt-4 border-t border-gray-200">
-          <button
-            onClick={() => exportPatients('csv')}
-            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-          >
-            📊 Export CSV
-          </button>
-          <button
-            onClick={() => exportPatients('json')}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            📄 Export JSON
-          </button>
-        </div>
+        {/* Export Options Removed */}
       </div>
 
       {/* Error Display */}
@@ -578,6 +552,12 @@ function PatientSearchManagement() {
                   <span className="text-gray-600">👤 Gender:</span>
                   <span className="font-medium">{patient.gender}</span>
                 </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">👨‍⚕️ Assigned Doctor:</span>
+                  <span className="font-medium text-blue-600">
+                    {patient.assigned_doctor || "No doctor assigned"}
+                  </span>
+                </div>
                 {patient.blood_type && (
                   <div className="flex justify-between">
                     <span className="text-gray-600">🩸 Blood Type:</span>
@@ -605,7 +585,7 @@ function PatientSearchManagement() {
                   onClick={() => viewPatientDashboard(patient)}
                   className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                 >
-                  📋 View Full Dashboard
+                  📋 Patient Record
                 </button>
               </div>
             </div>
@@ -633,11 +613,11 @@ function PatientSearchManagement() {
           >
             ← Previous
           </button>
-          
+
           <span className="text-gray-600">
             Page {currentPage} of {totalPages}
           </span>
-          
+
           <button
             onClick={() => handleSearch(currentPage + 1)}
             disabled={currentPage === totalPages}
@@ -665,7 +645,7 @@ function PatientSearchManagement() {
                 </button>
               </div>
             </div>
-            
+
             <div className="p-6">
               {selectedPatient.medicalHistory ? (
                 <>
@@ -710,11 +690,10 @@ function PatientSearchManagement() {
                         <button
                           key={tab}
                           onClick={() => setActiveTab(tab)}
-                          className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                            activeTab === tab
+                          className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === tab
                               ? 'border-blue-500 text-blue-600'
                               : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                          }`}
+                            }`}
                         >
                           {tab === 'visits' && '📅 Medical Visits'}
                           {tab === 'prescriptions' && '💊 Prescriptions'}

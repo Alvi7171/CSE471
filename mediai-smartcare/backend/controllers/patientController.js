@@ -1105,6 +1105,90 @@ exports.logMedicalAccess = (req, res) => {
   }
 };
 
+/**
+ * Delete patient record (patient can delete their own record)
+ * DELETE /api/patients/:patientId
+ */
+exports.deletePatientRecord = async (req, res) => {
+  try {
+    const { patientId } = req.params;
+    const userRole = req.user?.role;
+    const userPhone = req.user?.phone;
+
+    // Get patient info - support Smart ID, regular ID, or Phone Number
+    let patient;
+    if (patientId.startsWith("SPC-")) {
+      const rows = await query("SELECT * FROM patients WHERE smart_patient_id = ?", [patientId]);
+      patient = rows[0];
+    } else if (patientId.length > 8 && !isNaN(patientId)) {
+      // Likely a phone number
+      const rows = await query("SELECT * FROM patients WHERE phone_number = ?", [patientId]);
+      patient = rows[0];
+    } else {
+      const rows = await query("SELECT * FROM patients WHERE patient_id = ?", [patientId]);
+      patient = rows[0];
+    }
+
+    if (!patient) {
+      return res.status(404).json({
+        success: false,
+        message: "Patient not found",
+      });
+    }
+
+    const actualPatientId = patient.patient_id;
+
+    // Security check: only patients can delete their own records
+    if (userRole === "patient") {
+      if (patient.phone_number !== userPhone) {
+        return res.status(403).json({
+          success: false,
+          message: "Forbidden: You can only delete your own medical records",
+        });
+      }
+    } else if (userRole !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Forbidden: Only patients and admins can delete patient records",
+      });
+    }
+
+    // Start transaction to delete all related records
+    await query("BEGIN TRANSACTION");
+
+    try {
+      // Delete related records in order of dependencies
+      await query("DELETE FROM treatment_timeline WHERE patient_id = ?", [actualPatientId]);
+      await query("DELETE FROM prescriptions WHERE patient_id = ?", [actualPatientId]);
+      await query("DELETE FROM lab_reports WHERE test_id IN (SELECT test_id FROM lab_tests WHERE patient_id = ?)", [actualPatientId]);
+      await query("DELETE FROM lab_tests WHERE patient_id = ?", [actualPatientId]);
+      await query("DELETE FROM diagnostic_reports WHERE patient_id = ?", [actualPatientId]);
+      await query("DELETE FROM medical_visits WHERE patient_id = ?", [actualPatientId]);
+      await query("DELETE FROM emergency_cases WHERE patient_phone = ?", [patient.phone_number]);
+      
+      // Delete the patient record last
+      await query("DELETE FROM patients WHERE patient_id = ?", [actualPatientId]);
+
+      await query("COMMIT");
+
+      res.json({
+        success: true,
+        message: "Patient record and all related medical data deleted successfully",
+      });
+    } catch (error) {
+      await query("ROLLBACK");
+      throw error;
+    }
+  } catch (error) {
+    console.error("Error deleting patient record:", error.message);
+    res.status(500).json({
+      success: false,
+      message: "Error deleting patient record",
+      error: error.message,
+    });
+  }
+};
+
 // ============================================
 // AI PATIENT SUMMARY ENDPOINT
 // ============================================

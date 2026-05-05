@@ -93,10 +93,11 @@ function EmergencyResponse({ currentUser, targetEmergencyId, clearTargetEmergenc
   
   const fetchDoctors = async () => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/schedule/doctors`);
+      const response = await axios.get(`${API_BASE_URL}/all-patients/doctors`);
       setDoctors(response.data.doctors || []);
+      console.log("Loaded doctors for emergency:", response.data.doctors);
     } catch (err) {
-      console.error("Failed to load doctors");
+      console.error("Failed to load doctors:", err);
     }
   };
 
@@ -244,23 +245,7 @@ function EmergencyResponse({ currentUser, targetEmergencyId, clearTargetEmergenc
               <h1 className="text-3xl font-bold text-gray-800">🚨 Emergency Response Center</h1>
               <p className="text-gray-500 mt-1">Manage emergency cases, triage, and alerts</p>
             </div>
-            <div className="flex items-center gap-4">
-              {alerts.length > 0 && (
-                <button
-                  onClick={() => setActiveTab("cases")}
-                  className="bg-red-100 text-red-700 px-4 py-2 rounded-full font-semibold animate-pulse hover:bg-red-200 transition-colors cursor-pointer"
-                >
-                  🔔 {alerts.length} New Alerts
-                </button>
-              )}
-              <button
-                onClick={() => setShowNewEmergencyForm(true)}
-                className="bg-gradient-to-r from-red-600 to-orange-600 text-white px-6 py-3 rounded-xl font-semibold hover:from-red-700 hover:to-orange-700 transition-all shadow-md"
-              >
-                ⚠️ Report Emergency
-              </button>
-            </div>
-          </div>
+                      </div>
         </div>
 
         {/* Critical Alert Banner */}

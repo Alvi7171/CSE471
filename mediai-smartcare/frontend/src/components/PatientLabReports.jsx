@@ -2,61 +2,33 @@ import React, { useState, useEffect } from "react";
 import api, { patientAPI } from "../services/api";
 
 function PatientLabReports({ currentUser }) {
-  const [medicalHistory, setMedicalHistory] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [labTests, setLabTests] = useState([]);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [selectedTest, setSelectedTest] = useState(null);
-  
-  // Profile completion state
-  const [showRegisterForm, setShowRegisterForm] = useState(false);
-  const [regLoading, setRegLoading] = useState(false);
-  const [regForm, setRegForm] = useState({
-    firstName: "",
-    lastName: "",
-    dateOfBirth: "",
-    gender: "Male",
-    bloodType: "",
-    phoneNumber: currentUser?.phone || "",
-    email: currentUser?.email || "",
-    address: "",
-    city: ""
-  });
+  const [searchId, setSearchId] = useState("");
+  const [hasSearched, setHasSearched] = useState(false);
 
-  useEffect(() => {
-    fetchHistory();
-  }, [currentUser]);
-
-  const fetchHistory = async () => {
-    if (!currentUser) return;
+  const handleSearch = async (e) => {
+    e.preventDefault();
+    if (!searchId.trim()) return;
+    
     setLoading(true);
     setError("");
+    setHasSearched(true);
+    setSelectedTest(null);
     try {
-      // Use the phone number to identify the patient for the history endpoint
-      const response = await api.get(`/patients/${currentUser.phone}/complete-history`);
-      setMedicalHistory(response.data.medicalHistory);
-    } catch (err) {
-      console.error("Error fetching history:", err);
-      if (err.response?.status === 404) {
-        setError("Patient profile not found. Please complete your profile to view reports.");
-      } else {
-        setError("Failed to load your lab reports. Please ensure your profile is complete.");
+      const response = await api.get(`/lab/tests?patientId=${searchId.trim()}`);
+      setLabTests(response.data.tests || []);
+      if (response.data.tests?.length === 0) {
+        setError("No lab tests found for this Patient ID.");
       }
+    } catch (err) {
+      console.error("Error fetching lab tests:", err);
+      setError("Failed to load lab reports. Please check the Patient ID and try again.");
+      setLabTests([]);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleRegister = async (e) => {
-    e.preventDefault();
-    setRegLoading(true);
-    try {
-      await patientAPI.register(regForm);
-      setShowRegisterForm(false);
-      fetchHistory(); // Refresh history after registration
-    } catch (err) {
-      alert(err.response?.data?.message || "Registration failed");
-    } finally {
-      setRegLoading(false);
     }
   };
 
@@ -69,108 +41,6 @@ function PatientLabReports({ currentUser }) {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 animate-pulse">
-        <div className="text-6xl mb-4">🧪</div>
-        <div className="text-slate-400 font-bold text-xl tracking-widest uppercase">Analyzing Laboratory Records...</div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="bg-white rounded-[2.5rem] shadow-xl p-12 text-center max-w-2xl mx-auto mt-10 border border-slate-100">
-        <div className="text-6xl mb-6">👤</div>
-        <h3 className="text-2xl font-black text-slate-900 mb-2">Profile Incomplete</h3>
-        <p className="text-slate-500 font-medium mb-8">{error}</p>
-        <button 
-          onClick={() => setShowRegisterForm(true)}
-          className="bg-blue-600 text-white px-10 py-4 rounded-2xl font-black shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all transform hover:-translate-y-1"
-        >
-          Complete My Profile Now
-        </button>
-
-        {/* Registration Modal */}
-        {showRegisterForm && (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
-            <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-xl overflow-hidden animate-in zoom-in-95 duration-300">
-              <div className="p-10 text-left">
-                <div className="flex justify-between items-center mb-8">
-                  <div>
-                    <h2 className="text-3xl font-black text-slate-900">Patient Registration</h2>
-                    <p className="text-slate-500 font-medium mt-1">Link your account to medical records</p>
-                  </div>
-                  <button onClick={() => setShowRegisterForm(false)} className="text-2xl font-light text-slate-400 hover:text-slate-600">&times;</button>
-                </div>
-
-                <form onSubmit={handleRegister} className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">First Name</label>
-                      <input 
-                        type="text" required value={regForm.firstName}
-                        onChange={e => setRegForm({...regForm, firstName: e.target.value})}
-                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 font-bold focus:border-blue-500 outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Last Name</label>
-                      <input 
-                        type="text" required value={regForm.lastName}
-                        onChange={e => setRegForm({...regForm, lastName: e.target.value})}
-                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 font-bold focus:border-blue-500 outline-none"
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Date of Birth</label>
-                      <input 
-                        type="date" required value={regForm.dateOfBirth}
-                        onChange={e => setRegForm({...regForm, dateOfBirth: e.target.value})}
-                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 font-bold focus:border-blue-500 outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Gender</label>
-                      <select 
-                        value={regForm.gender}
-                        onChange={e => setRegForm({...regForm, gender: e.target.value})}
-                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 font-bold focus:border-blue-500 outline-none"
-                      >
-                        <option>Male</option>
-                        <option>Female</option>
-                        <option>Other</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Phone Number (Pre-filled)</label>
-                    <input 
-                      type="text" readOnly value={regForm.phoneNumber}
-                      className="w-full bg-slate-100 border-2 border-slate-100 rounded-xl px-4 py-3 font-bold text-slate-400 outline-none cursor-not-allowed"
-                    />
-                  </div>
-                  <div className="pt-4">
-                    <button 
-                      type="submit" disabled={regLoading}
-                      className="w-full bg-slate-900 text-white py-4 rounded-xl font-black shadow-xl hover:bg-slate-800 transition-all disabled:opacity-50"
-                    >
-                      {regLoading ? "Saving Profile..." : "Save Profile & View Reports"}
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  const labTests = medicalHistory?.labTests || [];
-
   return (
     <div className="max-w-6xl mx-auto space-y-10 animate-in fade-in duration-700">
       <div className="flex flex-col md:flex-row justify-between items-end gap-4 border-b border-slate-200 pb-8">
@@ -178,14 +48,42 @@ function PatientLabReports({ currentUser }) {
           <h2 className="text-4xl font-black text-slate-900 tracking-tight">Diagnostic History</h2>
           <p className="text-slate-500 font-medium mt-2">Track your laboratory analysis and medical reports</p>
         </div>
-        <div className="bg-blue-600 text-white px-6 py-2 rounded-2xl font-black text-xs uppercase tracking-widest">
-          {labTests.length} Total Records
-        </div>
+        <form onSubmit={handleSearch} className="flex gap-2 w-full md:w-auto">
+          <input
+            type="text"
+            placeholder="Enter Patient ID..."
+            value={searchId}
+            onChange={(e) => setSearchId(e.target.value)}
+            className="px-4 py-2 border-2 border-slate-200 rounded-xl focus:border-blue-500 outline-none w-full md:w-64"
+          />
+          <button 
+            type="submit"
+            className="bg-slate-900 text-white px-6 py-2 rounded-xl font-bold hover:bg-slate-800 transition-colors"
+          >
+            Search
+          </button>
+        </form>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-        {/* Test Timeline */}
-        <div className="lg:col-span-7 space-y-6">
+      {!hasSearched && !loading ? (
+        <div className="bg-slate-50 rounded-3xl p-16 text-center border-2 border-dashed border-slate-200">
+          <div className="text-6xl mb-6">🔍</div>
+          <h3 className="text-2xl font-black text-slate-800 mb-2">Search Lab Reports</h3>
+          <p className="text-slate-500 font-medium">Enter your Patient ID above to view your laboratory test progress and reports.</p>
+        </div>
+      ) : loading ? (
+        <div className="flex flex-col items-center justify-center py-20 animate-pulse">
+          <div className="text-6xl mb-4">🧪</div>
+          <div className="text-slate-400 font-bold text-xl tracking-widest uppercase">Searching Laboratory Records...</div>
+        </div>
+      ) : error ? (
+        <div className="bg-red-50 text-red-600 p-6 rounded-2xl border border-red-100 text-center font-medium">
+          {error}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+          {/* Test Timeline */}
+          <div className="lg:col-span-7 space-y-6">
           {labTests.length === 0 ? (
             <div className="bg-white rounded-3xl p-16 text-center shadow-xl border border-slate-100 border-dashed">
               <div className="text-6xl mb-6">📂</div>
@@ -301,6 +199,7 @@ function PatientLabReports({ currentUser }) {
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }

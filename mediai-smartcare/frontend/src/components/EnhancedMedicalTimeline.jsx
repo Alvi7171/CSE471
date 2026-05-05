@@ -11,9 +11,31 @@ function EnhancedMedicalTimeline() {
   const [timelineFilter, setTimelineFilter] = useState("all");
   const [dateRange, setDateRange] = useState({ from: "", to: "" });
   const [showFilters, setShowFilters] = useState(false);
+  
+  // New states for patient dropdown
+  const [allPatients, setAllPatients] = useState([]);
+  const [filteredPatients, setFilteredPatients] = useState([]);
+  const [showPatientDropdown, setShowPatientDropdown] = useState(false);
+  const [loadingPatients, setLoadingPatients] = useState(false);
+  const [sortBy, setSortBy] = useState("first_name"); // Default sort by first name
+  const [sortOrder, setSortOrder] = useState("ASC"); // ASC or DESC
+  const [forceUpdate, setForceUpdate] = useState(0); // Force re-render
+  
+  // Doctor selection states
+  const [availableDoctors, setAvailableDoctors] = useState([]);
+  const [selectedDoctor, setSelectedDoctor] = useState(null);
+  const [loadingDoctors, setLoadingDoctors] = useState(false);
+  
+  // Delete patient states
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [patientToDelete, setPatientToDelete] = useState(null);
+  const [deletingPatient, setDeletingPatient] = useState(false);
 
-  // Load last registered patient from localStorage on mount
+  // Load all patients on component mount and set up auto-refresh
   useEffect(() => {
+    console.log("Component mounted, loading patients...");
+    loadAllPatients();
+    
     const savedPatient = localStorage.getItem("lastRegisteredPatient");
     if (savedPatient) {
       try {
@@ -24,7 +46,137 @@ function EnhancedMedicalTimeline() {
         console.error("Error loading saved patient:", e);
       }
     }
+
+    // Auto-refresh patient list every 30 seconds to catch new lab test requests
+    const refreshInterval = setInterval(() => {
+      console.log("Auto-refresh triggered");
+      loadAllPatients();
+    }, 30000);
+
+    return () => clearInterval(refreshInterval);
   }, []);
+
+  // Load all patients from database
+  const loadAllPatients = async () => {
+    try {
+      setLoadingPatients(true);
+      const response = await api.get("/all-patients", {
+      headers: {
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      },
+      params: {
+        _t: new Date().getTime() // Cache-busting parameter
+      }
+    });
+      
+      console.log("API Response:", response.data);
+      
+      if (response.data.success) {
+        const patients = response.data.data.map(patient => ({
+          patient_id: patient.patient_id,
+          smart_patient_id: patient.smart_patient_id,
+          first_name: patient.first_name,
+          last_name: patient.last_name,
+          gender: patient.gender,
+          blood_type: patient.blood_type,
+          phone_number: patient.phone_number,
+          email: patient.email,
+          assigned_doctor: patient.assigned_doctor || null
+        }));
+        
+        console.log("Processed patients:", patients);
+        console.log("Total patients loaded:", patients.length);
+        
+        // Force immediate state update
+        setAllPatients([...patients]);
+        setFilteredPatients([...patients]);
+        
+        console.log("State updated with", patients.length, "patients");
+        
+        // Force re-render
+        setForceUpdate(prev => prev + 1);
+      }
+    } catch (err) {
+      console.error("Error loading patients:", err);
+      // Set empty arrays if API fails - will show no patients message
+      setAllPatients([]);
+      setFilteredPatients([]);
+    } finally {
+      setLoadingPatients(false);
+    }
+  };
+
+  // Filter and sort patients based on search input
+  useEffect(() => {
+    console.log("Filter effect triggered. searchInput:", searchInput);
+    console.log("allPatients length:", allPatients.length);
+    
+    if (!searchInput.trim()) {
+      console.log("No search input, setting filteredPatients to allPatients");
+      setFilteredPatients([...allPatients]);
+      return;
+    }
+
+    const filtered = allPatients.filter(patient => {
+      const searchLower = searchInput.toLowerCase();
+      return (
+        patient.first_name?.toLowerCase().includes(searchLower) ||
+        patient.last_name?.toLowerCase().includes(searchLower) ||
+        patient.smart_patient_id?.toLowerCase().includes(searchLower) ||
+        patient.patient_id?.toString().includes(searchLower) ||
+        patient.phone_number?.includes(searchLower) ||
+        patient.email?.toLowerCase().includes(searchLower)
+      );
+    });
+
+    console.log("Filtered patients length:", filtered.length);
+    setFilteredPatients([...filtered]);
+
+    // Sort the filtered results
+    const sorted = filtered.sort((a, b) => {
+      let aValue, bValue;
+      
+      switch (sortBy) {
+        case "first_name":
+          aValue = a.first_name || "";
+          bValue = b.first_name || "";
+          break;
+        case "last_name":
+          aValue = a.last_name || "";
+          bValue = b.last_name || "";
+          break;
+        case "patient_id":
+          aValue = parseInt(a.patient_id) || 0;
+          bValue = parseInt(b.patient_id) || 0;
+          break;
+        case "smart_patient_id":
+          aValue = a.smart_patient_id || "";
+          bValue = b.smart_patient_id || "";
+          break;
+        case "registration_date":
+          aValue = new Date(a.registration_date) || new Date(0);
+          bValue = new Date(b.registration_date) || new Date(0);
+          break;
+        default:
+          aValue = a.first_name || "";
+          bValue = b.first_name || "";
+      }
+
+      if (typeof aValue === "string") {
+        return sortOrder === "ASC" 
+          ? aValue.localeCompare(bValue)
+          : bValue.localeCompare(aValue);
+      } else {
+        return sortOrder === "ASC" 
+          ? aValue - bValue
+          : bValue - aValue;
+      }
+    });
+
+    setFilteredPatients(sorted);
+  }, [searchInput, allPatients, sortBy, sortOrder]);
 
   const handleSearch = async (e, patientIdToSearch = null) => {
     if (e) e.preventDefault();
@@ -534,6 +686,7 @@ function EnhancedMedicalTimeline() {
             placeholder="Enter Smart Patient ID (SPC-XXXXX) or Patient ID..."
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
+            onFocus={() => setShowPatientDropdown(true)}
             className="flex-1 px-6 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           <button
@@ -543,6 +696,141 @@ function EnhancedMedicalTimeline() {
           >
             {loading ? "🔄 Loading..." : "🔍 Search"}
           </button>
+        </div>
+
+        
+        {/* Patient List Table */}
+        <div className="border-t border-gray-200 pt-4">
+          <div className="mb-3 flex justify-between items-center">
+            <h3 className="text-lg font-semibold text-gray-800">
+              📋 All Patients ({filteredPatients.length} found) | State: {allPatients.length} total
+            </h3>
+            <div className="flex items-center gap-2">
+              {loadingPatients && (
+                <div className="flex items-center gap-2 text-sm text-gray-600">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                  Loading...
+                </div>
+              )}
+              <button
+                onClick={() => {
+                  console.log("Manual refresh triggered");
+                  loadAllPatients();
+                }}
+                className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
+              >
+                🔄 Refresh
+              </button>
+            </div>
+          </div>
+          
+          <div className="space-y-2">
+            {/* Debug display */}
+            <div className="text-xs text-gray-500 bg-gray-100 p-2 rounded">
+              DEBUG: filteredPatients.length = {filteredPatients.length} | allPatients.length = {allPatients.length}
+              <br />
+              DEBUG: filteredPatients = {JSON.stringify(filteredPatients.slice(0, 3), null, 2)}
+            </div>
+            
+            {filteredPatients.length > 0 ? (
+              filteredPatients.map((patient) => (
+                <div 
+                  key={patient.patient_id} 
+                  className="flex items-center justify-between p-4 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  {/* Patient ID */}
+                  <div className="flex-shrink-0 w-20 text-sm font-medium text-gray-900">
+                    #{patient.patient_id}
+                  </div>
+                  
+                  {/* Name */}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-gray-900 truncate">
+                      {patient.first_name} {patient.last_name}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {patient.gender} | {patient.blood_type || 'N/A'}
+                    </div>
+                  </div>
+                  
+                  {/* Smart Patient ID */}
+                  <div className="flex-shrink-0 w-32 text-sm text-gray-600 font-mono">
+                    {patient.smart_patient_id}
+                  </div>
+                  
+                  {/* Source */}
+                  <div className="flex-shrink-0 w-24">
+                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                      patient.source === 'registered' ? 'bg-blue-100 text-blue-800' :
+                      patient.source === 'lab_test' ? 'bg-green-100 text-green-800' :
+                      patient.source === 'emergency' ? 'bg-red-100 text-red-800' :
+                      'bg-gray-100 text-gray-800'
+                    }`}>
+                      {patient.source === 'registered' ? 'Registered' :
+                       patient.source === 'lab_test' ? 'Lab Test' :
+                       patient.source === 'emergency' ? 'Emergency' :
+                       'Unknown'}
+                    </span>
+                  </div>
+                  
+                  {/* Appointed Doctor */}
+                  <div className="flex-shrink-0 w-24">
+                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                      patient.assigned_doctor 
+                        ? 'bg-green-100 text-green-800' 
+                        : 'bg-red-100 text-red-800'
+                    }`}>
+                      {patient.assigned_doctor ? 'Yes' : 'No'}
+                    </span>
+                    {patient.assigned_doctor && (
+                      <div className="text-xs text-gray-600 mt-1 truncate">
+                        {patient.assigned_doctor}
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Contact */}
+                  <div className="flex-shrink-0 w-40 text-sm text-gray-600">
+                    <div className="truncate">📱 {patient.phone_number}</div>
+                    {patient.email && (
+                      <div className="text-xs text-gray-500 truncate">
+                        📧 {patient.email}
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Action Buttons */}
+                  <div className="flex-shrink-0 flex gap-2">
+                    <button
+                      onClick={() => {
+                        setSearchInput(patient.smart_patient_id || patient.patient_id.toString());
+                        handleSearch(null, patient.smart_patient_id || patient.patient_id.toString());
+                      }}
+                      className="px-3 py-2 bg-blue-600 text-white text-xs font-medium rounded-md hover:bg-blue-700 transition-colors"
+                    >
+                      📋 View Record
+                    </button>
+                    
+                    {/* Three-dot delete button */}
+                    <div className="relative">
+                      <button
+                        onClick={() => showDeleteDialog(patient)}
+                        className="px-2 py-2 bg-red-100 text-red-600 text-xs font-medium rounded-md hover:bg-red-200 transition-colors"
+                        title="Delete Patient"
+                      >
+                        ⋮
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <p className="text-lg">🔍 No patients found</p>
+                <p className="text-sm mt-2">Try adjusting your search or sort criteria</p>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Filters */}
@@ -559,13 +847,6 @@ function EnhancedMedicalTimeline() {
               </button>
               
               <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => exportMedicalHistory('json')}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                >
-                  📄 Export JSON
-                </button>
                 <button
                   type="button"
                   onClick={() => exportMedicalHistory('csv')}
@@ -700,6 +981,63 @@ function EnhancedMedicalTimeline() {
           <p className="text-gray-600 mb-4">
             Enter a patient's Smart Patient ID (format: SPC-XXXXX) or Patient ID to view their complete medical timeline with advanced filtering and analytics.
           </p>
+        </div>
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      {showDeleteConfirm && patientToDelete && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
+            <div className="text-center mb-6">
+              <div className="text-5xl mb-4">⚠️</div>
+              <h3 className="text-2xl font-bold text-gray-800 mb-2">Delete Patient</h3>
+              <p className="text-gray-600 mb-4">
+                Are you sure you want to permanently delete this patient?
+              </p>
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+                <div className="text-sm font-medium text-gray-800">
+                  <strong>{patientToDelete.first_name} {patientToDelete.last_name}</strong>
+                </div>
+                <div className="text-xs text-gray-600 mt-1">
+                  ID: #{patientToDelete.patient_id} | {patientToDelete.smart_patient_id}
+                </div>
+                <div className="text-xs text-gray-600">
+                  Source: {patientToDelete.source === 'registered' ? 'Registered' : 
+                          patientToDelete.source === 'lab_test' ? 'Lab Test' : 'Emergency'}
+                </div>
+              </div>
+              <p className="text-red-600 text-sm font-medium">
+                This action cannot be undone. All medical records will be permanently deleted.
+              </p>
+            </div>
+            
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowDeleteConfirm(false);
+                  setPatientToDelete(null);
+                }}
+                className="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium"
+                disabled={deletingPatient}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleDeletePatient(patientToDelete)}
+                className="flex-1 px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium disabled:opacity-50"
+                disabled={deletingPatient}
+              >
+                {deletingPatient ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    Deleting...
+                  </span>
+                ) : (
+                  "Delete Permanently"
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
