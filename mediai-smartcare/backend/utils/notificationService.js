@@ -22,7 +22,7 @@ const EMAIL_RECIPIENT_SCOPE = String(
 ).toLowerCase();
 
 const DEFAULT_PREFERENCES = {
-  emailEnabled: true,
+  emailEnabled: false,
   portalEnabled: true,
   reminderEnabled: true,
   reminderHoursBefore: DEFAULT_REMINDER_HOURS,
@@ -53,7 +53,9 @@ const normalizeBoolean = (value) =>
   String(value || "").toLowerCase() === "true";
 
 const isDuplicateError = (error) =>
-  /Duplicate entry|UNIQUE constraint failed/i.test(String(error?.message || ""));
+  /Duplicate entry|UNIQUE constraint failed/i.test(
+    String(error?.message || ""),
+  );
 
 const safeJsonParse = (value, fallback = null) => {
   if (!value) return fallback;
@@ -145,6 +147,17 @@ const shouldSendEmailToRecipient = (recipient) => {
   return recipient.role === "patient";
 };
 
+const shouldSendImmediateEmail = ({ eventType, context, recipient }) => {
+  if (recipient.role !== "patient") {
+    return false;
+  }
+
+  return (
+    eventType === "update" &&
+    String(context?.status || "").toLowerCase() === "confirmed"
+  );
+};
+
 const getReminderValidity = (context) => {
   const appointmentAt = combineLocalDateTime(
     context.appointment_date,
@@ -155,7 +168,7 @@ const getReminderValidity = (context) => {
     return { appointmentAt: null, sendReminder: false };
   }
 
-  const validStatuses = ["pending", "confirmed"];
+  const validStatuses = ["confirmed"];
   return {
     appointmentAt,
     sendReminder:
@@ -302,25 +315,30 @@ const getAppointmentNotificationContext = async (appointmentId) => {
 const resolveRecipients = (context) => {
   const recipients = [];
 
-  if (context.patient_user_id || context.patient_user_email || context.patient_email) {
+  if (
+    context.patient_user_id ||
+    context.patient_user_email ||
+    context.patient_email
+  ) {
     recipients.push({
       role: "patient",
       userId: context.patient_user_id || null,
-      email:
-        context.patient_user_email || context.patient_email || null,
+      email: context.patient_user_email || context.patient_email || null,
       displayName:
         context.patient_user_name || context.patient_name || "Patient",
     });
   }
 
-  if (context.doctor_user_id || context.doctor_user_email || context.doctor_profile_email) {
+  if (
+    context.doctor_user_id ||
+    context.doctor_user_email ||
+    context.doctor_profile_email
+  ) {
     recipients.push({
       role: "doctor",
       userId: context.doctor_user_id || null,
-      email:
-        context.doctor_user_email || context.doctor_profile_email || null,
-      displayName:
-        context.doctor_user_name || context.doctor_name || "Doctor",
+      email: context.doctor_user_email || context.doctor_profile_email || null,
+      displayName: context.doctor_user_name || context.doctor_name || "Doctor",
     });
   }
 
@@ -534,6 +552,7 @@ const enqueueImmediateNotification = async ({
   recipient,
   preferences,
   eventType,
+  context,
   title,
   message,
   details,
@@ -559,7 +578,8 @@ const enqueueImmediateNotification = async ({
   if (
     recipient.email &&
     preferences.emailEnabled &&
-    shouldSendEmailToRecipient(recipient)
+    shouldSendEmailToRecipient(recipient) &&
+    shouldSendImmediateEmail({ eventType, context, recipient })
   ) {
     const notificationId = await createNotificationRecord({
       userId: recipient.userId,
@@ -736,6 +756,7 @@ const dispatchAppointmentNotifications = async (appointmentId, eventType) => {
         recipient,
         preferences,
         eventType,
+        context,
         title,
         message,
         details,
@@ -745,11 +766,7 @@ const dispatchAppointmentNotifications = async (appointmentId, eventType) => {
       delivered += 1;
     }
 
-    if (
-      eventType === "confirmation" ||
-      (eventType === "update" &&
-        String(context.status || "").toLowerCase() === "confirmed")
-    ) {
+    if (String(context.status || "").toLowerCase() === "confirmed") {
       await queueReminderNotifications(context, recipient, preferences);
     }
   }
@@ -772,9 +789,9 @@ const processDueNotifications = async () => {
       WHERE status = 'pending'
         AND scheduled_for IS NOT NULL
       ORDER BY scheduled_for ASC
-      LIMIT ?
+      LIMIT ${BATCH_SIZE}
       `,
-      [BATCH_SIZE],
+      [],
     );
 
     for (const notification of rows) {
