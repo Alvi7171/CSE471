@@ -1,9 +1,4 @@
-/**
- * Laboratory Test & Emergency Response Controller
- * Handles lab test requests, results, reports, and emergency response management
- */
-
-const { db, engine } = require("../config/database");
+const { db, query, engine } = require("../config/database");
 
 // ============================================
 // UTILITY FUNCTIONS
@@ -12,11 +7,15 @@ const { db, engine } = require("../config/database");
 /**
  * Initialize lab and emergency tables
  */
-const initializeLabEmergencyTables = () => {
+const initializeLabEmergencyTables = async () => {
   try {
-    if (engine !== "sqlite") {
+    const isSqlite = engine === "sqlite";
+    const autoInc = isSqlite ? "AUTOINCREMENT" : "AUTO_INCREMENT";
+    const pkType = isSqlite ? "INTEGER" : "INT";
+
+    if (!isSqlite) {
       console.log(
-        "ℹ️ Skipping SQLite lab & emergency table bootstrap for non-SQLite database engine",
+        "ℹ️ Skipping SQLite lab & emergency table bootstrap for non-SQLite database engine (should be handled by schema.sql)",
       );
       return;
     }
@@ -24,111 +23,123 @@ const initializeLabEmergencyTables = () => {
     db.exec(`
       -- Laboratory Tests Table
       CREATE TABLE IF NOT EXISTS lab_tests (
-        test_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        patient_id INTEGER NOT NULL,
-        doctor_id INTEGER NOT NULL,
-        appointment_id INTEGER,
-        test_type TEXT NOT NULL,
-        test_name TEXT NOT NULL,
-        priority TEXT DEFAULT 'Normal' CHECK(priority IN ('Normal', 'Urgent', 'Emergency')),
-        status TEXT DEFAULT 'Pending' CHECK(status IN ('Pending', 'Sample Collected', 'In Progress', 'Completed', 'Cancelled')),
-        request_date TEXT NOT NULL,
-        scheduled_date TEXT,
-        collected_date TEXT,
-        completed_date TEXT,
-        lab_name TEXT,
-        cost REAL,
+        test_id ${pkType} PRIMARY KEY ${autoInc},
+        patient_id INT NOT NULL,
+        patient_name VARCHAR(255),
+        doctor_id INT NOT NULL,
+        appointment_id INT,
+        test_type VARCHAR(100) NOT NULL,
+        test_name VARCHAR(255) NOT NULL,
+        priority VARCHAR(50) DEFAULT 'Normal',
+        status VARCHAR(50) DEFAULT 'Pending',
+        request_date DATETIME NOT NULL,
+        scheduled_date DATETIME,
+        collected_date DATETIME,
+        completed_date DATETIME,
+        lab_name VARCHAR(255),
+        cost DECIMAL(10,2),
         notes TEXT,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (patient_id) REFERENCES patients(patient_id),
-        FOREIGN KEY (doctor_id) REFERENCES doctors(doctor_id)
-      );
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
 
-      -- Lab Test Results Table
+    // Add patient_name column if it doesn't exist (migration)
+    try {
+      await query("ALTER TABLE lab_tests ADD COLUMN patient_name VARCHAR(255)");
+    } catch (e) {
+      // Column might already exist
+    }
+
+    // Lab Test Results Table
+    await query(`
       CREATE TABLE IF NOT EXISTS lab_results (
-        result_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        test_id INTEGER NOT NULL,
-        parameter_name TEXT NOT NULL,
-        value TEXT NOT NULL,
-        unit TEXT,
-        reference_range TEXT,
-        is_abnormal BOOLEAN DEFAULT 0,
-        abnormality_level TEXT CHECK(abnormality_level IN ('Low', 'High', 'Critical')),
+        result_id ${pkType} PRIMARY KEY ${autoInc},
+        test_id INT NOT NULL,
+        parameter_name VARCHAR(255) NOT NULL,
+        value VARCHAR(255) NOT NULL,
+        unit VARCHAR(50),
+        reference_range VARCHAR(255),
+        is_abnormal TINYINT(1) DEFAULT 0,
+        abnormality_level VARCHAR(50),
         notes TEXT,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (test_id) REFERENCES lab_tests(test_id) ON DELETE CASCADE
-      );
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
 
-      -- Lab Reports Table
+    // Lab Reports Table
+    await query(`
       CREATE TABLE IF NOT EXISTS lab_reports (
-        report_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        test_id INTEGER NOT NULL,
-        report_type TEXT NOT NULL,
-        report_date TEXT NOT NULL,
-        lab_technician TEXT,
-        reviewed_by INTEGER,
-        reviewed_date TEXT,
-        file_path TEXT,
+        report_id ${pkType} PRIMARY KEY ${autoInc},
+        test_id INT NOT NULL,
+        report_type VARCHAR(255) NOT NULL,
+        report_date DATETIME NOT NULL,
+        lab_technician VARCHAR(255),
+        reviewed_by INT,
+        reviewed_date DATETIME,
+        file_path VARCHAR(255),
         summary TEXT,
         interpretation TEXT,
-        is_delivered BOOLEAN DEFAULT 0,
-        delivered_date TEXT,
-        delivered_to TEXT,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (test_id) REFERENCES lab_tests(test_id) ON DELETE CASCADE,
-        FOREIGN KEY (reviewed_by) REFERENCES doctors(doctor_id)
-      );
+        is_delivered TINYINT(1) DEFAULT 0,
+        delivered_date DATETIME,
+        delivered_to VARCHAR(100),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
 
-      -- Emergency Cases Table
+    // Emergency Cases Table
+    await query(`
       CREATE TABLE IF NOT EXISTS emergency_cases (
-        emergency_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        patient_id INTEGER,
-        patient_name TEXT NOT NULL,
-        patient_phone TEXT,
-        patient_age INTEGER,
-        patient_gender TEXT,
-        emergency_type TEXT NOT NULL,
-        severity TEXT NOT NULL CHECK(severity IN ('Critical', 'High', 'Medium', 'Low')),
-        triage_category TEXT CHECK(triage_category IN ('Resuscitation', 'Emergency', 'Urgent', 'Less Urgent')),
-        arrival_time TEXT NOT NULL,
-        status TEXT DEFAULT 'Active' CHECK(status IN ('Active', 'In Treatment', 'Admitted', 'Discharged', 'Transferred', 'Deceased')),
+        emergency_id ${pkType} PRIMARY KEY ${autoInc},
+        patient_id INT,
+        patient_name VARCHAR(255) NOT NULL,
+        patient_phone VARCHAR(50),
+        patient_age INT,
+        patient_gender VARCHAR(20),
+        emergency_type VARCHAR(100) NOT NULL,
+        severity VARCHAR(50) NOT NULL,
+        triage_category VARCHAR(100),
+        arrival_time DATETIME NOT NULL,
+        status VARCHAR(50) DEFAULT 'Active',
         location TEXT,
         chief_complaint TEXT,
         vital_signs TEXT,
         initial_assessment TEXT,
-        assigned_doctor_id INTEGER,
-        assigned_nurse_id INTEGER,
+        assigned_doctor_id INT,
+        assigned_nurse_id INT,
         treatment_given TEXT,
         outcome TEXT,
         notes TEXT,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-      );
-
-      -- Emergency Alerts Table
-      CREATE TABLE IF NOT EXISTS emergency_alerts (
-        alert_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        emergency_id INTEGER NOT NULL,
-        alert_type TEXT NOT NULL CHECK(alert_type IN ('New Emergency', 'Critical Patient', 'Doctor Assignment', 'Status Update', 'Bed Required', 'Equipment Required')),
-        message TEXT NOT NULL,
-        priority TEXT DEFAULT 'High' CHECK(priority IN ('Critical', 'High', 'Medium', 'Low')),
-        is_read BOOLEAN DEFAULT 0,
-        sent_to TEXT,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (emergency_id) REFERENCES emergency_cases(emergency_id) ON DELETE CASCADE
-      );
-
-      -- Emergency Response Team Table
-      CREATE TABLE IF NOT EXISTS emergency_team (
-        team_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        emergency_id INTEGER NOT NULL,
-        team_member_id INTEGER NOT NULL,
-        member_role TEXT NOT NULL CHECK(member_role IN ('Lead Doctor', 'Assisting Doctor', 'Nurse', 'Technician')),
-        assigned_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        status TEXT DEFAULT 'Active' CHECK(status IN ('Active', 'Completed', 'Released')),
-        FOREIGN KEY (emergency_id) REFERENCES emergency_cases(emergency_id) ON DELETE CASCADE
-      );
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
     `);
+
+    // Emergency Alerts Table
+    await query(`
+      CREATE TABLE IF NOT EXISTS emergency_alerts (
+        alert_id ${pkType} PRIMARY KEY ${autoInc},
+        emergency_id INT NOT NULL,
+        alert_type VARCHAR(100) NOT NULL,
+        message TEXT NOT NULL,
+        priority VARCHAR(50) DEFAULT 'High',
+        is_read TINYINT(1) DEFAULT 0,
+        sent_to VARCHAR(255),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Emergency Response Team Table
+    await query(`
+      CREATE TABLE IF NOT EXISTS emergency_team (
+        team_id ${pkType} PRIMARY KEY ${autoInc},
+        emergency_id INT NOT NULL,
+        team_member_id INT NOT NULL,
+        member_role VARCHAR(100) NOT NULL,
+        assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        status VARCHAR(50) DEFAULT 'Active'
+      )
+    `);
+
     console.log("✅ Lab & Emergency tables initialized successfully");
   } catch (error) {
     console.error("❌ Error initializing lab & emergency tables:", error.message);
@@ -146,44 +157,51 @@ initializeLabEmergencyTables();
  * Create a new lab test request
  * POST /api/lab/tests
  */
-exports.createLabTest = (req, res) => {
+exports.createLabTest = async (req, res) => {
   try {
     const {
-      patientId, doctorId, appointmentId, testType, testName,
+      patientId, patientName, doctorId, appointmentId, testType, testName,
       priority, scheduledDate, labName, cost, notes
     } = req.body;
 
-    if (!patientId || !doctorId || !testType || !testName) {
+    console.log("Creating lab test request:", req.body);
+
+    if (!patientName || !testType || !testName) {
       return res.status(400).json({
         success: false,
-        message: "Missing required fields: patientId, doctorId, testType, testName"
+        message: "Missing required fields: patientName, testType, testName"
       });
     }
 
-    const stmt = db.prepare(`
-      INSERT INTO lab_tests (
-        patient_id, doctor_id, appointment_id, test_type, test_name,
-        priority, status, request_date, scheduled_date, lab_name, cost, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, 'Pending', ?, ?, ?, ?, ?)
-    `);
+    const requestDate = new Date().toISOString().slice(0, 19).replace('T', ' ');
 
-    const result = stmt.run(
-      patientId, doctorId, appointmentId || null, testType, testName,
-      priority || 'Normal', new Date().toISOString(), scheduledDate || null,
+    const params = [
+      patientId || 0, patientName, doctorId || 1, appointmentId || null, 
+      testType, testName, priority || 'Normal', requestDate, scheduledDate || null,
       labName || null, cost || null, notes || null
-    );
+    ];
+
+    console.log("Query params:", params);
+
+    const result = await query(`
+      INSERT INTO lab_tests (
+        patient_id, patient_name, doctor_id, appointment_id, test_type, test_name,
+        priority, status, request_date, scheduled_date, lab_name, cost, notes
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'Pending', ?, ?, ?, ?, ?)
+    `, params);
 
     res.status(201).json({
       success: true,
       message: "Lab test request created successfully",
-      testId: result.lastInsertRowid
+      testId: result.insertId
     });
   } catch (error) {
-    console.error("Error creating lab test:", error.message);
+    console.error("Error creating lab test:", error);
     res.status(500).json({
       success: false,
       message: "Error creating lab test request",
-      error: error.message
+      error: error.message,
+      details: error.toString()
     });
   }
 };
@@ -192,13 +210,18 @@ exports.createLabTest = (req, res) => {
  * Get all lab tests (with filters)
  * GET /api/lab/tests
  */
-exports.getLabTests = (req, res) => {
+exports.getLabTests = async (req, res) => {
   try {
     const { patientId, status, priority, fromDate, toDate } = req.query;
 
-    let query = `
-      SELECT lt.*, p.first_name, p.last_name, p.phone_number,
-             d.name as doctor_name, d.specialization
+    const isSqlite = engine === "sqlite";
+    const displayNameSql = isSqlite 
+      ? "COALESCE(p.first_name || ' ' || p.last_name, lt.patient_name)" 
+      : "COALESCE(CONCAT(p.first_name, ' ', p.last_name), lt.patient_name)";
+
+    let sql = `
+      SELECT lt.*, ${displayNameSql} as display_name,
+             p.phone_number, d.name as doctor_name, d.specialization
       FROM lab_tests lt
       LEFT JOIN patients p ON lt.patient_id = p.patient_id
       LEFT JOIN doctors d ON lt.doctor_id = d.doctor_id
@@ -207,30 +230,29 @@ exports.getLabTests = (req, res) => {
     const params = [];
 
     if (patientId) {
-      query += " AND lt.patient_id = ?";
+      sql += " AND lt.patient_id = ?";
       params.push(patientId);
     }
     if (status) {
-      query += " AND lt.status = ?";
+      sql += " AND lt.status = ?";
       params.push(status);
     }
     if (priority) {
-      query += " AND lt.priority = ?";
+      sql += " AND lt.priority = ?";
       params.push(priority);
     }
     if (fromDate) {
-      query += " AND lt.request_date >= ?";
+      sql += " AND lt.request_date >= ?";
       params.push(fromDate);
     }
     if (toDate) {
-      query += " AND lt.request_date <= ?";
+      sql += " AND lt.request_date <= ?";
       params.push(toDate);
     }
 
-    query += " ORDER BY lt.request_date DESC";
+    sql += " ORDER BY lt.request_date DESC";
 
-    const stmt = db.prepare(query);
-    const tests = stmt.all(...params);
+    const tests = await query(sql, params);
 
     res.json({
       success: true,
@@ -250,19 +272,26 @@ exports.getLabTests = (req, res) => {
  * Get lab test by ID
  * GET /api/lab/tests/:testId
  */
-exports.getLabTestById = (req, res) => {
+exports.getLabTestById = async (req, res) => {
   try {
     const { testId } = req.params;
 
-    const testStmt = db.prepare(`
-      SELECT lt.*, p.first_name, p.last_name, p.phone_number, p.date_of_birth, p.gender,
+    const isSqlite = engine === "sqlite";
+    const displayNameSql = isSqlite 
+      ? "COALESCE(p.first_name || ' ' || p.last_name, lt.patient_name)" 
+      : "COALESCE(CONCAT(p.first_name, ' ', p.last_name), lt.patient_name)";
+
+    const testRows = await query(`
+      SELECT lt.*, ${displayNameSql} as display_name,
+             p.first_name, p.last_name, p.phone_number, p.date_of_birth, p.gender,
              d.name as doctor_name, d.specialization
       FROM lab_tests lt
       LEFT JOIN patients p ON lt.patient_id = p.patient_id
       LEFT JOIN doctors d ON lt.doctor_id = d.doctor_id
       WHERE lt.test_id = ?
-    `);
-    const test = testStmt.get(testId);
+    `, [testId]);
+
+    const test = testRows[0];
 
     if (!test) {
       return res.status(404).json({
@@ -272,12 +301,11 @@ exports.getLabTestById = (req, res) => {
     }
 
     // Get results
-    const resultsStmt = db.prepare("SELECT * FROM lab_results WHERE test_id = ?");
-    const results = resultsStmt.all(testId);
+    const results = await query("SELECT * FROM lab_results WHERE test_id = ?", [testId]);
 
     // Get report
-    const reportStmt = db.prepare("SELECT * FROM lab_reports WHERE test_id = ? ORDER BY report_date DESC LIMIT 1");
-    const report = reportStmt.get(testId);
+    const reportRows = await query("SELECT * FROM lab_reports WHERE test_id = ? ORDER BY report_date DESC LIMIT 1", [testId]);
+    const report = reportRows[0];
 
     res.json({
       success: true,
@@ -299,7 +327,7 @@ exports.getLabTestById = (req, res) => {
  * Update lab test status
  * PUT /api/lab/tests/:testId/status
  */
-exports.updateLabTestStatus = (req, res) => {
+exports.updateLabTestStatus = async (req, res) => {
   try {
     const { testId } = req.params;
     const { status, collectedDate, completedDate } = req.body;
@@ -312,25 +340,24 @@ exports.updateLabTestStatus = (req, res) => {
       });
     }
 
-    let query = "UPDATE lab_tests SET status = ?, updated_at = ?";
-    const params = [status, new Date().toISOString()];
+    let sql = "UPDATE lab_tests SET status = ?";
+    const params = [status];
 
     if (status === 'Sample Collected' && collectedDate) {
-      query += ", collected_date = ?";
+      sql += ", collected_date = ?";
       params.push(collectedDate);
     }
     if (status === 'Completed' && completedDate) {
-      query += ", completed_date = ?";
+      sql += ", completed_date = ?";
       params.push(completedDate);
     }
 
-    query += " WHERE test_id = ?";
+    sql += " WHERE test_id = ?";
     params.push(testId);
 
-    const stmt = db.prepare(query);
-    const result = stmt.run(...params);
+    const result = await query(sql, params);
 
-    if (result.changes === 0) {
+    if (result.affectedRows === 0) {
       return res.status(404).json({
         success: false,
         message: "Lab test not found"
@@ -355,7 +382,7 @@ exports.updateLabTestStatus = (req, res) => {
  * Add lab test results
  * POST /api/lab/tests/:testId/results
  */
-exports.addLabResults = (req, res) => {
+exports.addLabResults = async (req, res) => {
   try {
     const { testId } = req.params;
     const { results } = req.body; // Array of { parameterName, value, unit, referenceRange, isAbnormal, abnormalityLevel, notes }
@@ -367,25 +394,19 @@ exports.addLabResults = (req, res) => {
       });
     }
 
-    const insertStmt = db.prepare(`
-      INSERT INTO lab_results (test_id, parameter_name, value, unit, reference_range, is_abnormal, abnormality_level, notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    const insertMany = db.transaction((results) => {
-      for (const r of results) {
-        insertStmt.run(
-          testId, r.parameterName, r.value, r.unit || null,
-          r.referenceRange || null, r.isAbnormal ? 1 : 0,
-          r.abnormalityLevel || null, r.notes || null
-        );
-      }
-    });
-
-    insertMany(results);
+    for (const r of results) {
+      await query(`
+        INSERT INTO lab_results (test_id, parameter_name, value, unit, reference_range, is_abnormal, abnormality_level, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        testId, r.parameterName, r.value, r.unit || null,
+        r.referenceRange || null, r.isAbnormal ? 1 : 0,
+        r.abnormalityLevel || null, r.notes || null
+      ]);
+    }
 
     // Update test status to In Progress if not already
-    db.prepare("UPDATE lab_tests SET status = 'In Progress' WHERE test_id = ? AND status = 'Sample Collected'").run(testId);
+    await query("UPDATE lab_tests SET status = 'In Progress' WHERE test_id = ? AND status = 'Sample Collected'", [testId]);
 
     res.status(201).json({
       success: true,
@@ -406,14 +427,14 @@ exports.addLabResults = (req, res) => {
  * Generate lab report
  * POST /api/lab/tests/:testId/report
  */
-exports.generateLabReport = (req, res) => {
+exports.generateLabReport = async (req, res) => {
   try {
     const { testId } = req.params;
     const { reportType, labTechnician, reviewedBy, summary, interpretation } = req.body;
 
     // Get test details
-    const testStmt = db.prepare("SELECT * FROM lab_tests WHERE test_id = ?");
-    const test = testStmt.get(testId);
+    const testRows = await query("SELECT * FROM lab_tests WHERE test_id = ?", [testId]);
+    const test = testRows[0];
 
     if (!test) {
       return res.status(404).json({
@@ -423,21 +444,18 @@ exports.generateLabReport = (req, res) => {
     }
 
     // Get results
-    const resultsStmt = db.prepare("SELECT * FROM lab_results WHERE test_id = ?");
-    const results = resultsStmt.all(testId);
+    const results = await query("SELECT * FROM lab_results WHERE test_id = ?", [testId]);
 
     // Check for critical abnormalities
     const criticalResults = results.filter(r => r.abnormality_level === 'Critical');
     const hasCritical = criticalResults.length > 0;
 
-    const stmt = db.prepare(`
+    const result = await query(`
       INSERT INTO lab_reports (
         test_id, report_type, report_date, lab_technician, reviewed_by,
         summary, interpretation, is_delivered
       ) VALUES (?, ?, ?, ?, ?, ?, ?, 0)
-    `);
-
-    const result = stmt.run(
+    `, [
       testId,
       reportType || 'Complete Blood Count',
       new Date().toISOString(),
@@ -445,16 +463,15 @@ exports.generateLabReport = (req, res) => {
       reviewedBy || null,
       summary || `Test completed with ${results.length} parameters analyzed.${hasCritical ? ' CRITICAL VALUES DETECTED - Immediate doctor review required.' : ''}`,
       interpretation || null
-    );
+    ]);
 
     // Update test status to Completed
-    db.prepare("UPDATE lab_tests SET status = 'Completed', completed_date = ? WHERE test_id = ?")
-      .run(new Date().toISOString(), testId);
+    await query("UPDATE lab_tests SET status = 'Completed', completed_date = ? WHERE test_id = ?", [new Date().toISOString(), testId]);
 
     res.status(201).json({
       success: true,
       message: "Lab report generated successfully",
-      reportId: result.lastInsertRowid,
+      reportId: result.insertId,
       hasCriticalValues: hasCritical
     });
   } catch (error) {
@@ -471,19 +488,17 @@ exports.generateLabReport = (req, res) => {
  * Deliver lab report to patient/doctor
  * PUT /api/lab/reports/:reportId/deliver
  */
-exports.deliverLabReport = (req, res) => {
+exports.deliverLabReport = async (req, res) => {
   try {
     const { reportId } = req.params;
     const { deliveredTo } = req.body;
 
-    const stmt = db.prepare(`
+    const result = await query(`
       UPDATE lab_reports SET is_delivered = 1, delivered_date = ?, delivered_to = ?
       WHERE report_id = ?
-    `);
+    `, [new Date().toISOString(), deliveredTo || 'Patient', reportId]);
 
-    const result = stmt.run(new Date().toISOString(), deliveredTo || 'Patient', reportId);
-
-    if (result.changes === 0) {
+    if (result.affectedRows === 0) {
       return res.status(404).json({
         success: false,
         message: "Report not found"
@@ -508,28 +523,28 @@ exports.deliverLabReport = (req, res) => {
  * Get lab test statistics
  * GET /api/lab/stats
  */
-exports.getLabStats = (req, res) => {
+exports.getLabStats = async (req, res) => {
   try {
-    const totalTests = db.prepare("SELECT COUNT(*) as count FROM lab_tests").get().count;
-    const pendingTests = db.prepare("SELECT COUNT(*) as count FROM lab_tests WHERE status = 'Pending'").get().count;
-    const completedTests = db.prepare("SELECT COUNT(*) as count FROM lab_tests WHERE status = 'Completed'").get().count;
-    const emergencyTests = db.prepare("SELECT COUNT(*) as count FROM lab_tests WHERE priority = 'Emergency'").get().count;
+    const totalResult = await query("SELECT COUNT(*) as count FROM lab_tests");
+    const pendingResult = await query("SELECT COUNT(*) as count FROM lab_tests WHERE status = 'Pending'");
+    const completedResult = await query("SELECT COUNT(*) as count FROM lab_tests WHERE status = 'Completed'");
+    const emergencyResult = await query("SELECT COUNT(*) as count FROM lab_tests WHERE priority = 'Emergency'");
 
-    const testsByType = db.prepare(`
+    const testsByType = await query(`
       SELECT test_type, COUNT(*) as count FROM lab_tests GROUP BY test_type
-    `).all();
+    `);
 
-    const testsByStatus = db.prepare(`
+    const testsByStatus = await query(`
       SELECT status, COUNT(*) as count FROM lab_tests GROUP BY status
-    `).all();
+    `);
 
     res.json({
       success: true,
       stats: {
-        totalTests,
-        pendingTests,
-        completedTests,
-        emergencyTests,
+        totalTests: totalResult[0].count,
+        pendingTests: pendingResult[0].count,
+        completedTests: completedResult[0].count,
+        emergencyTests: emergencyResult[0].count,
         testsByType,
         testsByStatus
       }
@@ -552,7 +567,7 @@ exports.getLabStats = (req, res) => {
  * Create new emergency case
  * POST /api/emergency
  */
-exports.createEmergencyCase = (req, res) => {
+exports.createEmergencyCase = async (req, res) => {
   try {
     const {
       patientId, patientName, patientPhone, patientAge, patientGender,
@@ -576,31 +591,28 @@ exports.createEmergencyCase = (req, res) => {
       else assignedTriage = 'Less Urgent';
     }
 
-    const stmt = db.prepare(`
+    const result = await query(`
       INSERT INTO emergency_cases (
         patient_id, patient_name, patient_phone, patient_age, patient_gender,
         emergency_type, severity, triage_category, arrival_time, status,
         location, chief_complaint, vital_signs, initial_assessment,
         assigned_doctor_id, assigned_nurse_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', ?, ?, ?, ?, ?, ?)
-    `);
-
-    const result = stmt.run(
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
       patientId || null, patientName, patientPhone || null, patientAge || null,
       patientGender || null, emergencyType, severity, assignedTriage,
-      new Date().toISOString(), location || null, chiefComplaint || null,
+      new Date().toISOString(), req.body.status || 'Active', location || null, chiefComplaint || null,
       vitalSigns ? JSON.stringify(vitalSigns) : null, initialAssessment || null,
       assignedDoctorId || null, assignedNurseId || null
-    );
+    ]);
 
-    const emergencyId = result.lastInsertRowid;
+    const emergencyId = result.insertId;
 
     // Create initial alert
-    const alertStmt = db.prepare(`
+    await query(`
       INSERT INTO emergency_alerts (emergency_id, alert_type, message, priority)
       VALUES (?, 'New Emergency', ?, ?)
-    `);
-    alertStmt.run(emergencyId, `New ${severity} emergency case: ${emergencyType}`, severity === 'Critical' ? 'Critical' : 'High');
+    `, [emergencyId, `New ${severity} emergency case: ${emergencyType}`, severity === 'Critical' ? 'Critical' : 'High']);
 
     res.status(201).json({
       success: true,
@@ -622,11 +634,11 @@ exports.createEmergencyCase = (req, res) => {
  * Get all emergency cases (with filters)
  * GET /api/emergency
  */
-exports.getEmergencyCases = (req, res) => {
+exports.getEmergencyCases = async (req, res) => {
   try {
     const { status, severity, fromDate, toDate } = req.query;
 
-    let query = `
+    let sql = `
       SELECT ec.*, d.name as assigned_doctor_name
       FROM emergency_cases ec
       LEFT JOIN doctors d ON ec.assigned_doctor_id = d.doctor_id
@@ -635,26 +647,25 @@ exports.getEmergencyCases = (req, res) => {
     const params = [];
 
     if (status) {
-      query += " AND ec.status = ?";
+      sql += " AND ec.status = ?";
       params.push(status);
     }
     if (severity) {
-      query += " AND ec.severity = ?";
+      sql += " AND ec.severity = ?";
       params.push(severity);
     }
     if (fromDate) {
-      query += " AND ec.arrival_time >= ?";
+      sql += " AND ec.arrival_time >= ?";
       params.push(fromDate);
     }
     if (toDate) {
-      query += " AND ec.arrival_time <= ?";
+      sql += " AND ec.arrival_time <= ?";
       params.push(toDate);
     }
 
-    query += " ORDER BY ec.arrival_time DESC";
+    sql += " ORDER BY ec.arrival_time DESC";
 
-    const stmt = db.prepare(query);
-    const cases = stmt.all(...params);
+    const cases = await query(sql, params);
 
     res.json({
       success: true,
@@ -674,17 +685,18 @@ exports.getEmergencyCases = (req, res) => {
  * Get emergency case by ID
  * GET /api/emergency/:emergencyId
  */
-exports.getEmergencyCaseById = (req, res) => {
+exports.getEmergencyCaseById = async (req, res) => {
   try {
     const { emergencyId } = req.params;
 
-    const caseStmt = db.prepare(`
+    const caseRows = await query(`
       SELECT ec.*, d.name as assigned_doctor_name, d.specialization
       FROM emergency_cases ec
       LEFT JOIN doctors d ON ec.assigned_doctor_id = d.doctor_id
       WHERE ec.emergency_id = ?
-    `);
-    const emergencyCase = caseStmt.get(emergencyId);
+    `, [emergencyId]);
+
+    const emergencyCase = caseRows[0];
 
     if (!emergencyCase) {
       return res.status(404).json({
@@ -694,17 +706,15 @@ exports.getEmergencyCaseById = (req, res) => {
     }
 
     // Get alerts
-    const alertsStmt = db.prepare("SELECT * FROM emergency_alerts WHERE emergency_id = ? ORDER BY created_at DESC");
-    const alerts = alertsStmt.all(emergencyId);
+    const alerts = await query("SELECT * FROM emergency_alerts WHERE emergency_id = ? ORDER BY created_at DESC", [emergencyId]);
 
     // Get team
-    const teamStmt = db.prepare(`
+    const team = await query(`
       SELECT et.*, d.name as member_name, d.specialization
       FROM emergency_team et
       LEFT JOIN doctors d ON et.team_member_id = d.doctor_id
       WHERE et.emergency_id = ?
-    `);
-    const team = teamStmt.all(emergencyId);
+    `, [emergencyId]);
 
     res.json({
       success: true,
@@ -726,12 +736,12 @@ exports.getEmergencyCaseById = (req, res) => {
  * Update emergency case status
  * PUT /api/emergency/:emergencyId/status
  */
-exports.updateEmergencyStatus = (req, res) => {
+exports.updateEmergencyStatus = async (req, res) => {
   try {
     const { emergencyId } = req.params;
     const { status, treatmentGiven, outcome, notes } = req.body;
 
-    const validStatuses = ['Active', 'In Treatment', 'Admitted', 'Discharged', 'Transferred', 'Deceased'];
+    const validStatuses = ['Reported', 'Active', 'In Treatment', 'Admitted', 'Discharged', 'Transferred', 'Deceased'];
     if (!validStatuses.includes(status)) {
       return res.status(400).json({
         success: false,
@@ -739,29 +749,28 @@ exports.updateEmergencyStatus = (req, res) => {
       });
     }
 
-    let query = "UPDATE emergency_cases SET status = ?, updated_at = ?";
+    let sql = "UPDATE emergency_cases SET status = ?, updated_at = ?";
     const params = [status, new Date().toISOString()];
 
     if (treatmentGiven) {
-      query += ", treatment_given = ?";
+      sql += ", treatment_given = ?";
       params.push(treatmentGiven);
     }
     if (outcome) {
-      query += ", outcome = ?";
+      sql += ", outcome = ?";
       params.push(outcome);
     }
     if (notes) {
-      query += ", notes = ?";
+      sql += ", notes = ?";
       params.push(notes);
     }
 
-    query += " WHERE emergency_id = ?";
+    sql += " WHERE emergency_id = ?";
     params.push(emergencyId);
 
-    const stmt = db.prepare(query);
-    const result = stmt.run(...params);
+    const result = await query(sql, params);
 
-    if (result.changes === 0) {
+    if (result.affectedRows === 0) {
       return res.status(404).json({
         success: false,
         message: "Emergency case not found"
@@ -769,11 +778,10 @@ exports.updateEmergencyStatus = (req, res) => {
     }
 
     // Create status update alert
-    const alertStmt = db.prepare(`
+    await query(`
       INSERT INTO emergency_alerts (emergency_id, alert_type, message, priority)
       VALUES (?, 'Status Update', ?, 'Medium')
-    `);
-    alertStmt.run(emergencyId, `Emergency status updated to: ${status}`);
+    `, [emergencyId, `Emergency status updated to: ${status}`]);
 
     res.json({
       success: true,
@@ -793,7 +801,7 @@ exports.updateEmergencyStatus = (req, res) => {
  * Assign doctor to emergency case
  * PUT /api/emergency/:emergencyId/assign-doctor
  */
-exports.assignDoctorToEmergency = (req, res) => {
+exports.assignDoctorToEmergency = async (req, res) => {
   try {
     const { emergencyId } = req.params;
     const { doctorId } = req.body;
@@ -805,29 +813,23 @@ exports.assignDoctorToEmergency = (req, res) => {
       });
     }
 
-    const stmt = db.prepare(`
-      UPDATE emergency_cases SET assigned_doctor_id = ?, updated_at = ?
-      WHERE emergency_id = ?
-    `);
-    const result = stmt.run(doctorId, new Date().toISOString(), emergencyId);
+    await query("UPDATE emergency_cases SET assigned_doctor_id = ? WHERE emergency_id = ?", [doctorId, emergencyId]);
 
-    if (result.changes === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "Emergency case not found"
-      });
+    // Add to team if not already
+    const teamExists = await query("SELECT * FROM emergency_team WHERE emergency_id = ? AND team_member_id = ?", [emergencyId, doctorId]);
+
+    if (teamExists.length === 0) {
+      await query(`
+        INSERT INTO emergency_team (emergency_id, team_member_id, member_role)
+        VALUES (?, ?, 'Lead Doctor')
+      `, [emergencyId, doctorId]);
     }
 
-    // Get doctor name for alert
-    const doctorStmt = db.prepare("SELECT name FROM doctors WHERE doctor_id = ?");
-    const doctor = doctorStmt.get(doctorId);
-
-    // Create assignment alert
-    const alertStmt = db.prepare(`
+    // Create alert
+    await query(`
       INSERT INTO emergency_alerts (emergency_id, alert_type, message, priority)
-      VALUES (?, 'Doctor Assignment', ?, 'High')
-    `);
-    alertStmt.run(emergencyId, `Dr. ${doctor.name} assigned to emergency case`);
+      VALUES (?, 'Doctor Assignment', 'Doctor has been assigned to the case', 'Medium')
+    `, [emergencyId]);
 
     res.json({
       success: true,
@@ -844,99 +846,17 @@ exports.assignDoctorToEmergency = (req, res) => {
 };
 
 /**
- * Get active emergencies (dashboard)
- * GET /api/emergency/active
+ * Get active alerts (emergency)
  */
-exports.getActiveEmergencies = (req, res) => {
+exports.getActiveAlerts = async (req, res) => {
   try {
-    const stmt = db.prepare(`
-      SELECT ec.*, d.name as assigned_doctor_name
-      FROM emergency_cases ec
-      LEFT JOIN doctors d ON ec.assigned_doctor_id = d.doctor_id
-      WHERE ec.status IN ('Active', 'In Treatment')
-      ORDER BY 
-        CASE ec.severity 
-          WHEN 'Critical' THEN 1 
-          WHEN 'High' THEN 2 
-          WHEN 'Medium' THEN 3 
-          ELSE 4 
-        END,
-        ec.arrival_time ASC
+    const alerts = await query(`
+      SELECT ea.*, ec.emergency_type, ec.patient_name
+      FROM emergency_alerts ea
+      JOIN emergency_cases ec ON ea.emergency_id = ec.emergency_id
+      WHERE ea.is_read = 0
+      ORDER BY ea.created_at DESC
     `);
-    const cases = stmt.all();
-
-    res.json({
-      success: true,
-      cases
-    });
-  } catch (error) {
-    console.error("Error fetching active emergencies:", error.message);
-    res.status(500).json({
-      success: false,
-      message: "Error fetching active emergencies",
-      error: error.message
-    });
-  }
-};
-
-/**
- * Get emergency statistics
- * GET /api/emergency/stats
- */
-exports.getEmergencyStats = (req, res) => {
-  try {
-    const totalCases = db.prepare("SELECT COUNT(*) as count FROM emergency_cases").get().count;
-    const activeCases = db.prepare("SELECT COUNT(*) as count FROM emergency_cases WHERE status IN ('Active', 'In Treatment')").get().count;
-    const criticalCases = db.prepare("SELECT COUNT(*) as count FROM emergency_cases WHERE severity = 'Critical' AND status IN ('Active', 'In Treatment')").get().count;
-
-    const casesBySeverity = db.prepare(`
-      SELECT severity, COUNT(*) as count FROM emergency_cases GROUP BY severity
-    `).all();
-
-    const casesByStatus = db.prepare(`
-      SELECT status, COUNT(*) as count FROM emergency_cases GROUP BY status
-    `).all();
-
-    const casesByType = db.prepare(`
-      SELECT emergency_type, COUNT(*) as count FROM emergency_cases GROUP BY emergency_type
-    `).all();
-
-    res.json({
-      success: true,
-      stats: {
-        totalCases,
-        activeCases,
-        criticalCases,
-        casesBySeverity,
-        casesByStatus,
-        casesByType
-      }
-    });
-  } catch (error) {
-    console.error("Error fetching emergency stats:", error.message);
-    res.status(500).json({
-      success: false,
-      message: "Error fetching emergency statistics",
-      error: error.message
-    });
-  }
-};
-
-/**
- * Get emergency alerts
- * GET /api/emergency/alerts
- */
-exports.getEmergencyAlerts = (req, res) => {
-  try {
-    const { unreadOnly } = req.query;
-
-    let query = "SELECT * FROM emergency_alerts ORDER BY created_at DESC";
-    if (unreadOnly === 'true') {
-      query = "SELECT * FROM emergency_alerts WHERE is_read = 0 ORDER BY created_at DESC";
-    }
-
-    const stmt = db.prepare(query);
-    const alerts = stmt.all();
 
     res.json({
       success: true,
@@ -953,26 +873,91 @@ exports.getEmergencyAlerts = (req, res) => {
 };
 
 /**
- * Mark alert as read
- * PUT /api/emergency/alerts/:alertId/read
+ * Get emergency statistics
  */
-exports.markAlertAsRead = (req, res) => {
+exports.getEmergencyStats = async (req, res) => {
   try {
-    const { alertId } = req.params;
-
-    const stmt = db.prepare("UPDATE emergency_alerts SET is_read = 1 WHERE alert_id = ?");
-    const result = stmt.run(alertId);
+    const total = await query("SELECT COUNT(*) as count FROM emergency_cases");
+    const active = await query("SELECT COUNT(*) as count FROM emergency_cases WHERE status = 'Active'");
+    const critical = await query("SELECT COUNT(*) as count FROM emergency_cases WHERE severity = 'Critical'");
+    const completed = await query("SELECT COUNT(*) as count FROM emergency_cases WHERE status = 'Discharged'");
 
     res.json({
       success: true,
-      message: "Alert marked as read"
+      stats: {
+        totalCases: total[0].count,
+        activeCases: active[0].count,
+        criticalCases: critical[0].count,
+        completedCases: completed[0].count
+      }
     });
   } catch (error) {
-    console.error("Error marking alert as read:", error.message);
+    console.error("Error fetching emergency stats:", error.message);
     res.status(500).json({
       success: false,
-      message: "Error marking alert as read",
-      error: error.message
+      message: "Error fetching emergency statistics"
     });
   }
 };
+<<<<<<< HEAD
+
+/**
+ * Get active emergencies
+ */
+exports.getActiveEmergencies = async (req, res) => {
+  try {
+    const cases = await query(`
+      SELECT * FROM emergency_cases 
+      WHERE status IN ('Active', 'In Treatment', 'Reported') 
+      ORDER BY arrival_time DESC
+    `);
+    res.json({ success: true, cases });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Error fetching active emergencies" });
+  }
+};
+
+/**
+ * Get all emergency alerts
+ */
+exports.getEmergencyAlerts = async (req, res) => {
+  try {
+    const { unreadOnly } = req.query;
+    let sql = "SELECT * FROM emergency_alerts";
+    if (unreadOnly === 'true') sql += " WHERE is_read = 0";
+    sql += " ORDER BY created_at DESC";
+    
+    const alerts = await query(sql);
+    res.json({ success: true, alerts });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Error fetching alerts" });
+  }
+};
+
+/**
+ * Get patient emergencies
+ */
+exports.getPatientEmergencies = async (req, res) => {
+  try {
+    const { patientPhone } = req.params;
+    const cases = await query("SELECT * FROM emergency_cases WHERE patient_phone = ? ORDER BY arrival_time DESC", [patientPhone]);
+    res.json({ success: true, cases });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Error fetching patient emergencies" });
+  }
+};
+
+/**
+ * Mark alert as read
+ */
+exports.markAlertAsRead = async (req, res) => {
+  try {
+    const { alertId } = req.params;
+    await query("UPDATE emergency_alerts SET is_read = 1 WHERE alert_id = ?", [alertId]);
+    res.json({ success: true, message: "Alert marked as read" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Error updating alert" });
+  }
+};
+=======
+>>>>>>> origin/main

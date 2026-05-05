@@ -4,7 +4,7 @@
  * Author: MD Shafiur Rahman Alvi (ID: 23201355)
  */
 
-const { db } = require("../config/database");
+const { db, query } = require("../config/database");
 const crypto = require("crypto");
 
 // ============================================
@@ -24,18 +24,89 @@ const generateSmartPatientID = () => {
   return `SPC-${randomChars}`;
 };
 
+// Get all patients (for admin/doctor view)
+exports.getAllPatients = async (req, res) => {
+  try {
+    const patients = db.prepare(`
+      SELECT patient_id, first_name, last_name, phone_number, email, date_of_birth, gender, blood_type, city, created_at
+      FROM patients
+      ORDER BY created_at DESC
+      LIMIT 100
+    `).all();
+
+    res.json({
+      success: true,
+      patients,
+    });
+  } catch (error) {
+    console.error("Error getting all patients:", error.message);
+    res.status(500).json({
+      success: false,
+      message: "Error getting patients",
+      error: error.message,
+    });
+  }
+};
+
+// Get patient timeline by phone number
+exports.getPatientTimelineByPhone = async (req, res) => {
+  try {
+    const { phone } = req.params;
+    
+    const patient = db.prepare(`
+      SELECT * FROM patients WHERE phone_number = ?
+    `).get(phone);
+
+    if (!patient) {
+      return res.status(404).json({
+        success: false,
+        message: "Patient not found",
+      });
+    }
+
+    // Get medical visits
+    const visits = db.prepare(`
+      SELECT * FROM medical_visits WHERE patient_id = ? ORDER BY visit_date DESC LIMIT 20
+    `).all(patient.patient_id);
+
+    // Get diagnostic reports
+    const reports = db.prepare(`
+      SELECT * FROM diagnostic_reports WHERE patient_id = ? ORDER BY report_date DESC LIMIT 20
+    `).all(patient.patient_id);
+
+    // Get prescriptions
+    const prescriptions = db.prepare(`
+      SELECT * FROM prescriptions WHERE patient_id = ? ORDER BY prescription_date DESC LIMIT 20
+    `).all(patient.patient_id);
+
+    // Get treatment timeline
+    const timeline = db.prepare(`
+      SELECT * FROM treatment_timeline WHERE patient_id = ? ORDER BY treatment_date DESC LIMIT 20
+    `).all(patient.patient_id);
+
+    res.json({
+      success: true,
+      patient,
+      visits,
+      reports,
+      prescriptions,
+      timeline,
+    });
+  } catch (error) {
+    console.error("Error getting patient timeline:", error.message);
+    res.status(500).json({
+      success: false,
+      message: "Error getting patient timeline",
+      error: error.message,
+    });
+  }
+};
+
 /**
  * Initialize patient tables if they don't exist
  */
 const initializePatientTables = () => {
   try {
-    if (typeof db.exec !== "function") {
-      console.log(
-        "ℹ️ Skipping SQLite patient table bootstrap for non-SQLite database engine",
-      );
-      return;
-    }
-
     db.exec(`
       CREATE TABLE IF NOT EXISTS patients (
         patient_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -353,25 +424,13 @@ exports.registerPatient = (req, res) => {
 
     // Handle specific database constraint errors
     let userMessage = "Error registering patient";
-    if (
-      error.message.includes("UNIQUE constraint failed: patients.phone_number")
-    ) {
-      userMessage =
-        "This phone number is already registered. Please use a different phone number.";
-    } else if (
-      error.message.includes("UNIQUE constraint failed: patients.email")
-    ) {
-      userMessage =
-        "This email is already registered. Please use a different email.";
-    } else if (
-      error.message.includes(
-        "UNIQUE constraint failed: patients.smart_patient_id",
-      )
-    ) {
+    if (error.message.includes("UNIQUE constraint failed: patients.phone_number")) {
+      userMessage = "This phone number is already registered. Please use a different phone number.";
+    } else if (error.message.includes("UNIQUE constraint failed: patients.email")) {
+      userMessage = "This email is already registered. Please use a different email.";
+    } else if (error.message.includes("UNIQUE constraint failed: patients.smart_patient_id")) {
       userMessage = "Smart Patient ID collision. Please try again.";
-    } else if (
-      error.message.includes("UNIQUE constraint failed: patients.national_id")
-    ) {
+    } else if (error.message.includes("UNIQUE constraint failed: patients.national_id")) {
       userMessage = "This national ID is already registered.";
     } else if (error.message.includes("UNIQUE constraint failed")) {
       userMessage = "Duplicate data detected. Please check your information.";
@@ -1096,22 +1155,25 @@ exports.revokeDoctorAccess = (req, res) => {
  * Get complete medical history for a patient
  * GET /api/patients/:patientId/complete-history
  */
-exports.getCompleteMedicalHistory = (req, res) => {
+exports.getCompleteMedicalHistory = async (req, res) => {
   try {
     const { patientId } = req.params;
+    const userRole = req.user?.role;
+    const userPhone = req.user?.phone;
 
-    // Get patient info - support both Smart Patient ID and regular Patient ID
-    let patientStmt;
+    // Get patient info - support Smart ID, regular ID, or Phone Number
+    let patient;
     if (patientId.startsWith("SPC-")) {
-      // Search by Smart Patient ID
-      patientStmt = db.prepare(
-        "SELECT * FROM patients WHERE smart_patient_id = ?",
-      );
+      const rows = await query("SELECT * FROM patients WHERE smart_patient_id = ?", [patientId]);
+      patient = rows[0];
+    } else if (patientId.length > 8 && !isNaN(patientId)) {
+      // Likely a phone number
+      const rows = await query("SELECT * FROM patients WHERE phone_number = ?", [patientId]);
+      patient = rows[0];
     } else {
-      // Search by Patient ID
-      patientStmt = db.prepare("SELECT * FROM patients WHERE patient_id = ?");
+      const rows = await query("SELECT * FROM patients WHERE patient_id = ?", [patientId]);
+      patient = rows[0];
     }
-    const patient = patientStmt.get(patientId);
 
     if (!patient) {
       return res.status(404).json({
@@ -1120,57 +1182,79 @@ exports.getCompleteMedicalHistory = (req, res) => {
       });
     }
 
-    // Use the actual patient_id for all subsequent queries
+    // Security check: if patient is requesting, ensure they are requesting their own record
+    if (userRole === "patient") {
+      if (patient.phone_number !== userPhone) {
+        return res.status(403).json({
+          success: false,
+          message: "Forbidden: You can only access your own medical records",
+        });
+      }
+    }
+
     const actualPatientId = patient.patient_id;
 
     // Get visits
-    const visitsStmt = db.prepare(`
+    const visits = await query(`
       SELECT mv.*, d.name as doctor_name, d.specialization
       FROM medical_visits mv
       LEFT JOIN doctors d ON mv.doctor_id = d.doctor_id
       WHERE mv.patient_id = ?
       ORDER BY mv.visit_date DESC
-    `);
-    const visits = visitsStmt.all(actualPatientId);
+    `, [actualPatientId]);
 
-    // Get reports
-    const reportsStmt = db.prepare(`
+    // Get legacy reports
+    const reports = await query(`
       SELECT dr.*, d.name as doctor_name
       FROM diagnostic_reports dr
       LEFT JOIN doctors d ON dr.doctor_id = d.doctor_id
       WHERE dr.patient_id = ?
       ORDER BY dr.report_date DESC
-    `);
-    const reports = reportsStmt.all(actualPatientId);
+    `, [actualPatientId]);
+
+    // Get new module lab tests & reports
+    let labSql = `
+      SELECT lt.*, lr.report_id, lr.report_type, lr.report_date, lr.is_delivered, lr.summary, lr.interpretation
+      FROM lab_tests lt
+      LEFT JOIN lab_reports lr ON lt.test_id = lr.test_id
+      WHERE lt.patient_id = ?
+    `;
+    
+    // If patient, only show delivered reports
+    if (userRole === "patient") {
+      labSql += " AND (lr.is_delivered = 1 OR lr.report_id IS NULL)"; 
+    }
+    
+    labSql += " ORDER BY lt.request_date DESC";
+    const labTests = await query(labSql, [actualPatientId]);
 
     // Get prescriptions
-    const prescriptionsStmt = db.prepare(`
+    const prescriptions = await query(`
       SELECT p.*, d.name as doctor_name
       FROM prescriptions p
       LEFT JOIN doctors d ON p.doctor_id = d.doctor_id
       WHERE p.patient_id = ?
       ORDER BY p.prescription_date DESC
-    `);
-    const prescriptions = prescriptionsStmt.all(actualPatientId);
+    `, [actualPatientId]);
 
     // Get timeline
-    const timelineStmt = db.prepare(`
+    const timeline = await query(`
       SELECT tt.*, d.name as doctor_name
       FROM treatment_timeline tt
       LEFT JOIN doctors d ON tt.doctor_id = d.doctor_id
       WHERE tt.patient_id = ?
       ORDER BY tt.treatment_date DESC
-    `);
-    const timeline = timelineStmt.all(actualPatientId);
+    `, [actualPatientId]);
 
     res.json({
       success: true,
       medicalHistory: {
         patient,
-        visits,
-        diagnosticReports: reports,
-        prescriptions,
-        treatmentTimeline: timeline,
+        visits: visits || [],
+        diagnosticReports: reports || [],
+        labTests: labTests || [],
+        prescriptions: prescriptions || [],
+        treatmentTimeline: timeline || [],
       },
     });
   } catch (error) {
@@ -1198,13 +1282,7 @@ exports.logMedicalAccess = (req, res) => {
       ) VALUES (?, ?, ?, ?, ?)
     `);
 
-    stmt.run(
-      patientId,
-      doctorId || null,
-      actionType,
-      recordType,
-      recordId || null,
-    );
+    stmt.run(patientId, doctorId || null, actionType, recordType, recordId || null);
 
     res.json({
       success: true,
@@ -1215,6 +1293,90 @@ exports.logMedicalAccess = (req, res) => {
     res.status(500).json({
       success: false,
       message: "Error logging access",
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * Delete patient record (patient can delete their own record)
+ * DELETE /api/patients/:patientId
+ */
+exports.deletePatientRecord = async (req, res) => {
+  try {
+    const { patientId } = req.params;
+    const userRole = req.user?.role;
+    const userPhone = req.user?.phone;
+
+    // Get patient info - support Smart ID, regular ID, or Phone Number
+    let patient;
+    if (patientId.startsWith("SPC-")) {
+      const rows = await query("SELECT * FROM patients WHERE smart_patient_id = ?", [patientId]);
+      patient = rows[0];
+    } else if (patientId.length > 8 && !isNaN(patientId)) {
+      // Likely a phone number
+      const rows = await query("SELECT * FROM patients WHERE phone_number = ?", [patientId]);
+      patient = rows[0];
+    } else {
+      const rows = await query("SELECT * FROM patients WHERE patient_id = ?", [patientId]);
+      patient = rows[0];
+    }
+
+    if (!patient) {
+      return res.status(404).json({
+        success: false,
+        message: "Patient not found",
+      });
+    }
+
+    const actualPatientId = patient.patient_id;
+
+    // Security check: only patients can delete their own records
+    if (userRole === "patient") {
+      if (patient.phone_number !== userPhone) {
+        return res.status(403).json({
+          success: false,
+          message: "Forbidden: You can only delete your own medical records",
+        });
+      }
+    } else if (userRole !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Forbidden: Only patients and admins can delete patient records",
+      });
+    }
+
+    // Start transaction to delete all related records
+    await query("BEGIN TRANSACTION");
+
+    try {
+      // Delete related records in order of dependencies
+      await query("DELETE FROM treatment_timeline WHERE patient_id = ?", [actualPatientId]);
+      await query("DELETE FROM prescriptions WHERE patient_id = ?", [actualPatientId]);
+      await query("DELETE FROM lab_reports WHERE test_id IN (SELECT test_id FROM lab_tests WHERE patient_id = ?)", [actualPatientId]);
+      await query("DELETE FROM lab_tests WHERE patient_id = ?", [actualPatientId]);
+      await query("DELETE FROM diagnostic_reports WHERE patient_id = ?", [actualPatientId]);
+      await query("DELETE FROM medical_visits WHERE patient_id = ?", [actualPatientId]);
+      await query("DELETE FROM emergency_cases WHERE patient_phone = ?", [patient.phone_number]);
+      
+      // Delete the patient record last
+      await query("DELETE FROM patients WHERE patient_id = ?", [actualPatientId]);
+
+      await query("COMMIT");
+
+      res.json({
+        success: true,
+        message: "Patient record and all related medical data deleted successfully",
+      });
+    } catch (error) {
+      await query("ROLLBACK");
+      throw error;
+    }
+  } catch (error) {
+    console.error("Error deleting patient record:", error.message);
+    res.status(500).json({
+      success: false,
+      message: "Error deleting patient record",
       error: error.message,
     });
   }
@@ -1331,3 +1493,4 @@ exports.getPatientSummary = async (req, res) => {
     });
   }
 };
+

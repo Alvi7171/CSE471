@@ -4,18 +4,23 @@ import BedAllocationDashboard from "./components/BedAllocationDashboard";
 import DoctorPortalSummary from "./components/DoctorPortalSummary";
 import DoctorPrescriptions from "./components/DoctorPrescriptions";
 import DoctorSchedule from "./components/DoctorSchedule";
-import EmergencyResponse from "./components/EmergencyResponse";
-import InventoryManagement from "./components/InventoryManagement";
-import LabTestManagement from "./components/LabTestManagement";
 import NotificationCenter from "./components/NotificationCenter";
 import PatientBooking from "./components/PatientBooking";
-import PatientDocuments from "./components/PatientDocuments";
-import PatientPortalSummary from "./components/PatientPortalSummary";
 import PatientRegistration from "./components/PatientRegistration";
 import PatientTimeline from "./components/PatientTimeline";
+import PatientSearchManagement from "./components/PatientSearchManagement";
+import SymptomChecker from "./components/SymptomChecker";
+import LabTestManagement from "./components/LabTestManagement";
+import EmergencyResponse from "./components/EmergencyResponse";
+import DoctorsList from "./components/DoctorsList";
+import PatientLabReports from "./components/PatientLabReports";
+import InventoryManagement from "./components/InventoryManagement";
+import BedAllocationDashboard from "./components/BedAllocationDashboard";
+import PatientDocuments from "./components/PatientDocuments";
+import PatientPortalSummary from "./components/PatientPortalSummary";
 import ProfileEditorModal from "./components/ProfileEditorModal";
 import RosterManagement from "./components/RosterManagement";
-import SymptomChecker from "./components/SymptomChecker";
+import DoctorPortalSummary from "./components/DoctorPortalSummary";
 import "./index.css";
 import { authAPI } from "./services/api";
 import { formatRoleUserId, getUserDisplayName } from "./utils/identity";
@@ -42,6 +47,8 @@ const roleTabs = {
   patient: [
     { key: "symptom", label: "AI Symptom Checker" },
     { key: "booking", label: "Book Appointment" },
+    { key: "doctors", label: "Doctors List" },
+    { key: "labreports", label: "🧪 Lab Reports" },
     { key: "timeline", label: "Patient Records" },
     { key: "documents", label: "My Prescriptions" },
   ],
@@ -50,11 +57,10 @@ const roleTabs = {
     { key: "prescriptions", label: "Prescriptions" },
     { key: "labtests", label: "Lab Tests" },
     { key: "emergency", label: "Emergency Response" },
+    { key: "timeline", label: "Medical Timeline" },
   ],
   admin: [
     { key: "schedule", label: "Doctor Schedule" },
-    { key: "beds", label: "AI Bed Allocation" },
-    { key: "inventory", label: "Inventory & Medicines" },
     { key: "registration", label: "Patient Registration" },
     { key: "analytics", label: "Analytics Dashboard" },
     { key: "prescriptions", label: "Prescriptions" },
@@ -62,6 +68,9 @@ const roleTabs = {
     { key: "roster", label: "Staff Roster" },
     { key: "labtests", label: "Lab Test Management" },
     { key: "emergency", label: "Emergency Response" },
+    { key: "timeline", label: "Medical Timeline" },
+    { key: "admin", label: "Admin Console" },
+    { key: "doctors", label: "Doctors List" },
   ],
 };
 
@@ -127,6 +136,7 @@ function App() {
   const [authError, setAuthError] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("symptom");
+  const [targetEmergencyId, setTargetEmergencyId] = useState(null);
   const [dashboardIntent, setDashboardIntent] = useState(null);
   const [showProfileEditor, setShowProfileEditor] = useState(false);
   const [profileRefreshNonce, setProfileRefreshNonce] = useState(0);
@@ -659,19 +669,46 @@ function App() {
                 dashboardIntent={dashboardIntent}
               />
             )}
+          {activeTab === "timeline" && (user.role === "doctor" || user.role === "admin") && (
+            <PatientSearchManagement />
+          )}
           {activeTab === "registration" && user.role === "admin" && (
             <PatientRegistration />
           )}
-          {activeTab === "labtests" &&
-            (user.role === "doctor" || user.role === "admin") && (
-              <LabTestManagement />
-            )}
-          {activeTab === "emergency" &&
-            (user.role === "doctor" || user.role === "admin") && (
-              <EmergencyResponse />
-            )}
+          {activeTab === "labtests" && (
+            <LabTestManagement currentUser={user} />
+          )}
+          {activeTab === "emergency" && (
+            <EmergencyResponse 
+              currentUser={user}
+              targetEmergencyId={targetEmergencyId} 
+              clearTargetEmergency={() => setTargetEmergencyId(null)} 
+            />
+          )}
+          {activeTab === "doctors" && (
+            <DoctorsList currentUser={user} />
+          )}
+          {activeTab === "labreports" && user.role === "patient" && (
+            <PatientLabReports currentUser={user} />
+          )}
           {activeTab === "analytics" && user.role === "admin" && (
             <AnalyticsReports />
+          )}
+          {activeTab === "admin" && user.role === "admin" && (
+            <div className="bg-white/85 backdrop-blur-md border border-white/70 rounded-2xl p-8 shadow-sm">
+              <h3 className="text-2xl font-semibold text-theme-primary mb-3">
+                Admin Console
+              </h3>
+              <p className="text-gray-700 mb-4">
+                Admin area is ready. You can add user management, reports, and
+                operational tools next.
+              </p>
+              <ul className="text-gray-700 space-y-2 list-disc pl-5">
+                <li>Manage doctors and role assignments</li>
+                <li>Review appointment analytics</li>
+                <li>Configure hospital-level settings</li>
+              </ul>
+            </div>
           )}
           {activeTab === "inventory" && user.role === "admin" && (
             <InventoryManagement />

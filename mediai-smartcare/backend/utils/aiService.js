@@ -36,13 +36,13 @@ const buildKnowledgeContext = (symptoms, age, gender) => {
   };
 };
 
-const applyDeterministicOverrides = (symptoms, analysis) => {
+const applyDeterministicOverrides = (symptoms, analysis, language = "en") => {
   const text = normalizeText(symptoms);
   const next = {
     ...analysis,
     possibleDiseases: Array.isArray(analysis.possibleDiseases)
       ? analysis.possibleDiseases
-      : ["General symptom pattern"],
+      : [language === 'bn' ? "সাধারণ লক্ষণ" : "General symptom pattern"],
   };
 
   const hasAny = (arr) => arr.some((item) => text.includes(item));
@@ -67,8 +67,9 @@ const applyDeterministicOverrides = (symptoms, analysis) => {
   if (emergencyCardiac || emergencyNeuro || breathingRedFlag) {
     next.urgencyLevel = "Emergency";
     if (!next.warning) {
-      next.warning =
-        "Red-flag symptoms detected. Seek emergency medical care immediately.";
+      next.warning = language === 'bn' 
+        ? "বিপজ্জনক লক্ষণ শনাক্ত করা হয়েছে। অবিলম্বে জরুরি চিকিৎসা সহায়তা নিন।"
+        : "Red-flag symptoms detected. Seek emergency medical care immediately.";
     }
   }
 
@@ -77,19 +78,20 @@ const applyDeterministicOverrides = (symptoms, analysis) => {
     next.recommendedSpecialist === "specialist name"
   ) {
     if (hasAny(["chest pain", "palpitations"])) {
-      next.recommendedSpecialist = "Cardiologist";
+      next.recommendedSpecialist = language === 'bn' ? "হৃদরোগ বিশেষজ্ঞ (Cardiologist)" : "Cardiologist";
     } else if (hasAny(["headache", "seizure", "weakness"])) {
-      next.recommendedSpecialist = "Neurologist";
+      next.recommendedSpecialist = language === 'bn' ? "স্নায়ুরোগ বিশেষজ্ঞ (Neurologist)" : "Neurologist";
     } else if (hasAny(["rash", "itching"])) {
-      next.recommendedSpecialist = "Dermatologist";
+      next.recommendedSpecialist = language === 'bn' ? "চর্মরোগ বিশেষজ্ঞ (Dermatologist)" : "Dermatologist";
     } else {
-      next.recommendedSpecialist = "General Physician";
+      next.recommendedSpecialist = language === 'bn' ? "সাধারণ চিকিৎসক (General Physician)" : "General Physician";
     }
   }
 
   if (!next.advice) {
-    next.advice =
-      "Please consult a licensed healthcare professional for examination and confirmation.";
+    next.advice = language === 'bn'
+      ? "অনুগ্রহ করে পরীক্ষা এবং নিশ্চিতকরণের জন্য একজন নিবন্ধিত চিকিৎসকের পরামর্শ নিন।"
+      : "Please consult a licensed healthcare professional for examination and confirmation.";
   }
 
   const allowedUrgency = ["Low", "Medium", "High", "Emergency"];
@@ -145,7 +147,7 @@ const requestGroqWithFallback = async (apiKey, messages) => {
   throw lastError;
 };
 
-async function analyzeSymptoms(symptoms, age = null, gender = null) {
+async function analyzeSymptoms(symptoms, age = null, gender = null, language = "en") {
   try {
     const apiKey = process.env.GROQ_API_KEY;
 
@@ -161,7 +163,8 @@ Follow these rules:
 - Do not provide definitive diagnosis.
 - Use urgency values only: Low, Medium, High, Emergency.
 - Recommend one specialist.
-- If red flags exist, urgency must be Emergency.`;
+- If red flags exist, urgency must be Emergency.
+${language === 'bn' ? '- IMPORTANT: All values in the JSON (except urgencyLevel) MUST be written in Bengali (বাংলা) language.' : ''}`;
 
     const userPrompt = {
       task: "Analyze patient symptoms with injected knowledge context",
@@ -190,13 +193,14 @@ Follow these rules:
     let analysis;
     try {
       const parsed = JSON.parse(aiResponse);
-      analysis = applyDeterministicOverrides(symptoms, parsed);
+      analysis = applyDeterministicOverrides(symptoms, parsed, language);
     } catch (parseError) {
       const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         analysis = applyDeterministicOverrides(
           symptoms,
           JSON.parse(jsonMatch[0]),
+          language
         );
       } else {
         throw parseError;
@@ -217,14 +221,16 @@ Follow these rules:
       success: false,
       error: error.message,
       analysis: applyDeterministicOverrides(symptoms, {
-        possibleDiseases: ["Unable to analyze at this time"],
+        possibleDiseases: [language === 'bn' ? "এই মুহূর্তে বিশ্লেষণ করা সম্ভব নয়" : "Unable to analyze at this time"],
         urgencyLevel: "Medium",
-        recommendedSpecialist: "General Physician",
-        advice:
-          "We recommend consulting with a healthcare professional for proper diagnosis.",
-        warning:
-          "AI service temporarily unavailable. Please seek professional medical advice.",
-      }),
+        recommendedSpecialist: language === 'bn' ? "সাধারণ চিকিৎসক" : "General Physician",
+        advice: language === 'bn' 
+          ? "সঠিক নির্ণয়ের জন্য আমরা একজন পেশাদার চিকিৎসকের পরামর্শ নেওয়ার সুপারিশ করছি।" 
+          : "We recommend consulting with a healthcare professional for proper diagnosis.",
+        warning: language === 'bn'
+          ? "এআই পরিষেবা সাময়িকভাবে অনুপলব্ধ। দয়া করে পেশাদার চিকিৎসকের পরামর্শ নিন।"
+          : "AI service temporarily unavailable. Please seek professional medical advice.",
+      }, language),
     };
   }
 }

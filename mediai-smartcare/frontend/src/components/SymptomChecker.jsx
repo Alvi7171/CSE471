@@ -23,6 +23,7 @@ const SymptomChecker = ({ currentUser }) => {
   const [error, setError] = useState("");
   const [history, setHistory] = useState([]);
   const [showHistory, setShowHistory] = useState(false);
+  const [language, setLanguage] = useState("en");
 
   useEffect(() => {
     setFormData((prev) => ({
@@ -50,6 +51,7 @@ const SymptomChecker = ({ currentUser }) => {
         age: formData.age ? parseInt(formData.age, 10) : currentUser?.age || null,
         gender: formData.gender || currentUser?.gender || null,
         symptoms: formData.symptoms,
+        language: language,
       });
       setResult(response);
     } catch (err) {
@@ -100,19 +102,28 @@ const SymptomChecker = ({ currentUser }) => {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-3xl font-bold text-primary mb-2">
-              AI Symptom Checker & Triage System
+            <h1 className="text-3xl font-bold text-primary mb-2">
+              🤖 {language === 'bn' ? 'এআই লক্ষণ পরীক্ষক এবং ট্রায়াজ সিস্টেম' : 'AI Symptom Checker & Triage System'}
             </h1>
             <p className="text-gray-600">
-              Get an instant health assessment and specialist recommendation.
+              {language === 'bn' ? 'তাত্ক্ষণিক এআই-চালিত স্বাস্থ্য মূল্যায়ন এবং বিশেষজ্ঞের পরামর্শ পান' : 'Get instant AI-powered health assessment and specialist recommendations'}
             </p>
             <p className="text-xs text-gray-500 mt-2">
-              Your profile details are pre-filled to keep symptom records
-              consistent.
+              Your profile details are pre-filled to keep symptom records consistent.
+            </p>
             </p>
           </div>
-          <button onClick={loadHistory} className="btn-secondary text-sm">
-            View History
-          </button>
+          <div className="flex gap-2">
+            <button 
+              onClick={() => setLanguage(l => l === "en" ? "bn" : "en")}
+              className="px-4 py-2 border rounded-xl text-sm font-semibold bg-white hover:bg-gray-50 transition"
+            >
+              {language === "en" ? "Bangla" : "English"}
+            </button>
+            <button onClick={loadHistory} className="btn-secondary text-sm">
+              {language === 'bn' ? 'ইতিহাস দেখুন' : 'View History'}
+            </button>
+          </div>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -186,7 +197,14 @@ const SymptomChecker = ({ currentUser }) => {
               disabled={loading || !formData.symptoms}
               className="btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? "Analyzing Symptoms..." : "Analyze Symptoms"}
+              {loading ? (
+                <>
+                  <span className="inline-block animate-spin mr-2">⏳</span>
+                  {language === 'bn' ? 'লক্ষণ বিশ্লেষণ করা হচ্ছে...' : 'Analyzing Symptoms...'}
+                </>
+              ) : (
+                language === 'bn' ? "🔍 লক্ষণ বিশ্লেষণ করুন" : "🔍 Analyze Symptoms"
+              )}
             </button>
             {result && (
               <button type="button" onClick={resetForm} className="btn-secondary">
@@ -206,19 +224,19 @@ const SymptomChecker = ({ currentUser }) => {
           <div className="mt-6 space-y-4">
             <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg p-6 border border-blue-200">
               <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                Analysis Results
+                📊 {language === 'bn' ? 'বিশ্লেষণের ফলাফল' : 'Analysis Results'}
                 <span
                   className={`ml-auto ${getUrgencyBadgeClass(
                     result.analysis.urgencyLevel,
                   )}`}
                 >
-                  {result.analysis.urgencyLevel} Priority
+                  {result.analysis.urgencyLevel} {language === 'bn' ? 'অগ্রাধিকার' : 'Priority'}
                 </span>
               </h2>
 
               <div className="mb-4">
                 <h3 className="font-semibold text-gray-700 mb-2">
-                  Possible Conditions:
+                  🩺 {language === 'bn' ? 'সম্ভাব্য রোগসমূহ:' : 'Possible Conditions:'}
                 </h3>
                 <div className="flex flex-wrap gap-2">
                   {result.analysis.possibleDiseases.map((disease) => (
@@ -234,7 +252,7 @@ const SymptomChecker = ({ currentUser }) => {
 
               <div className="mb-4">
                 <h3 className="font-semibold text-gray-700 mb-2">
-                  Recommended Specialist:
+                  👨‍⚕️ {language === 'bn' ? 'প্রস্তাবিত বিশেষজ্ঞ:' : 'Recommended Specialist:'}
                 </h3>
                 <p className="bg-white px-4 py-2 rounded-lg border border-gray-200 inline-block">
                   {result.analysis.recommendedSpecialist}
@@ -243,7 +261,7 @@ const SymptomChecker = ({ currentUser }) => {
 
               <div className="mb-4">
                 <h3 className="font-semibold text-gray-700 mb-2">
-                  Medical Advice:
+                  💡 {language === 'bn' ? 'চিকিৎসা পরামর্শ:' : 'Medical Advice:'}
                 </h3>
                 <p className="bg-white px-4 py-3 rounded-lg border border-gray-200">
                   {result.analysis.advice}
@@ -253,16 +271,15 @@ const SymptomChecker = ({ currentUser }) => {
               {result.analysis.warning && (
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                   <p className="text-yellow-800">
-                    <strong>Note:</strong> {result.analysis.warning}
+                    <strong>⚠️ {language === 'bn' ? 'সতর্কতা:' : 'Note:'}</strong> {result.analysis.warning}
                   </p>
                 </div>
               )}
 
-              {result.disclaimer && (
-                <div className="mt-4 bg-white border border-gray-300 rounded-xl bg-white/80 backdrop-blur-sm shadow-sm p-4">
-                  <p className="text-xs text-gray-600">{result.disclaimer}</p>
-                </div>
-              )}
+              {/* Disclaimer */}
+              <div className="mt-4 bg-white border border-gray-300 rounded-xl bg-white/80 backdrop-blur-sm shadow-sm p-4">
+                <p className="text-xs text-gray-600">{language === 'bn' ? 'এটি একটি এআই-চালিত মূল্যায়ন এবং এটি পেশাদার চিকিৎসা পরামর্শের বিকল্প নয়।' : result.disclaimer}</p>
+              </div>
             </div>
           </div>
         )}

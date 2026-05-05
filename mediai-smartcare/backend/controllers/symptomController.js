@@ -3,7 +3,7 @@ const { analyzeSymptoms } = require("../utils/aiService");
 
 const checkSymptoms = async (req, res) => {
   try {
-    const { patientName, age, gender, symptoms } = req.body;
+    const { patientName, age, gender, symptoms, language } = req.body;
 
     if (!symptoms || !String(symptoms).trim()) {
       return res.status(400).json({
@@ -12,7 +12,7 @@ const checkSymptoms = async (req, res) => {
       });
     }
 
-    const aiResult = await analyzeSymptoms(symptoms, age, gender);
+    const aiResult = await analyzeSymptoms(symptoms, age, gender, language);
     const analysis = aiResult.analysis || {};
 
     const result = await query(
